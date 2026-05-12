@@ -1,6 +1,6 @@
 kind = "api"
-previewPath = "/api" # TODO - should be excluded from preview in the first place
-title = "API Server"
+previewPath = "/"
+title = "Student Performance Dashboard"
 version = "1.0.0"
 id = "3B4_FFSkEVBkAeYMFRJ2e"
 
@@ -30,3 +30,11 @@ NODE_ENV = "production"
 
 [services.production.health.startup]
 path = "/api/healthz"
+
+[[services]]
+localPort = 8000
+name = "Student Dashboard"
+paths = ["/"]
+
+[services.development]
+run = "streamlit run /home/runner/workspace/artifacts/student-dashboard/app.py --server.port 8000 --server.headless true --browser.gatherUsageStats false"

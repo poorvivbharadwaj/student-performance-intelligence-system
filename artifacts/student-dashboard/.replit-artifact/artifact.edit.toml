@@ -1,0 +1,13 @@
+kind = "web"
+previewPath = "/"
+title = "Student Performance Dashboard"
+version = "1.0.0"
+id = "sAKXp9mNzQLdFrYcVw3Bt"
+
+[[services]]
+localPort = 8000
+name = "Student Dashboard"
+paths = ["/"]
+
+[services.development]
+run = "cd artifacts/student-dashboard && streamlit run app.py"

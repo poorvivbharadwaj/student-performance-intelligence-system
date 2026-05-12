@@ -1,0 +1,580 @@
+Build on my EXISTING Streamlit Student Performance Intelligence System project and preserve ALL current functionality exactly as implemented. Do NOT remove, simplify, redesign from scratch, or break any current workflow, tabs, graphs, uploads, prediction logic, dataset handling, PDF flow, or UI structure.
+
+IMPORTANT:
+I will paste my current code below this prompt. You must EXTEND that exact codebase carefully.
+
+PROJECT TYPE:
+AI-Powered Student Performance Intelligence Dashboard using:
+
+* Streamlit
+* Pandas
+* NumPy
+* Scikit-Learn
+* Plotly
+* ReportLab
+* Kaleido
+* Google Gemini API
+
+CORE REQUIREMENTS:
+
+* Keep ALL existing features exactly same.
+* Keep all current tabs working.
+* Keep dataset upload functionality unchanged.
+* Keep current ML prediction logic.
+* Keep current charts and graphs.
+* Keep existing PDF generation functionality and enhance it.
+* Do NOT rewrite the app from scratch.
+* Return FULL FINAL CODE only.
+
+ADD THESE ADVANCED FEATURES:
+
+━━━━━━━━━━━━━━━━━━━
+
+1. PASS / FAIL PREDICTION
+   ━━━━━━━━━━━━━━━━━━━
+
+Add:
+
+* Pass/Fail column using:
+  Average >= 50 → Pass
+  Else → Fail
+
+Show:
+
+* Pass/Fail prediction in Student Analysis
+* Pass percentage in Teacher Dashboard
+* Pass/Fail pie chart in Overview
+
+━━━━━━━━━━━━━━━━━━━
+2. LEADERBOARD SYSTEM
+━━━━━━━━━━━━━━━━━━━
+
+Create ranking system:
+
+* Rank students based on Average score
+* Show Top 10 leaderboard in Overview tab
+
+Include:
+
+* Rank
+* Student Name
+* Average Score
+* Risk Level
+
+Highlight top performer using styled success/info cards.
+
+━━━━━━━━━━━━━━━━━━━
+3. TEACHER DASHBOARD TAB
+━━━━━━━━━━━━━━━━━━━
+
+Add a new tab:
+👩‍🏫 Teacher Dashboard
+
+Include:
+
+* Class average
+* Pass percentage
+* Average attendance
+* Average study hours
+* High-risk students table
+* Top performers table
+* Weakest subject analysis
+* Subject-wise average chart
+* Risk distribution chart
+* Pass/fail distribution chart
+* Attendance analytics
+
+━━━━━━━━━━━━━━━━━━━
+4. SMART AI-LIKE INSIGHTS
+━━━━━━━━━━━━━━━━━━━
+
+Create dynamic insight generation logic.
+
+Analyze:
+
+* Attendance
+* Stress level
+* Study hours
+* Participation
+* Assignment completion
+* Scores
+* Trend
+
+Generate intelligent recommendations dynamically.
+
+Examples:
+
+* Low attendance warning
+* High stress warning
+* Improvement suggestions
+* Appreciation for good performance
+* Study recommendations
+
+Display in Student Analysis section.
+
+━━━━━━━━━━━━━━━━━━━
+5. OFFLINE AI CHATBOT
+━━━━━━━━━━━━━━━━━━━
+
+Add an intelligent offline chatbot that answers dataset-based questions dynamically.
+
+Supported question types:
+
+* Top student
+* Weakest student
+* Highest scorer
+* Lowest scorer
+* Average marks
+* Subject averages
+* Weakest subject
+* High-risk students
+* Pass percentage
+* Attendance insights
+* Improvement tips
+* Rank queries
+* Performance comparison
+* Trend-related questions
+
+Chatbot should:
+
+* Feel conversational
+* Give smart responses
+* Not rely only on hardcoded one-line replies
+* Use dataset dynamically
+
+━━━━━━━━━━━━━━━━━━━
+6. GOOGLE GEMINI AI INTEGRATION
+━━━━━━━━━━━━━━━━━━━
+
+Integrate real Gemini AI chatbot.
+
+Requirements:
+
+* Use google.generativeai
+* Sidebar API key input
+* Secure handling
+* “Ask Gemini AI” section
+* User can ask any academic or analytical question
+* Gemini gives intelligent answers
+
+If no API key:
+
+* Automatically fallback to offline chatbot
+
+Add:
+
+* Loading spinner
+* Error handling
+* Friendly UI
+
+━━━━━━━━━━━━━━━━━━━
+7. EARLY WARNING SYSTEM
+━━━━━━━━━━━━━━━━━━━
+
+Add Overview section:
+🚨 Early Warning System
+
+Detect students with:
+
+* Low attendance
+* Low scores
+* High stress
+* Low study hours
+
+Show:
+
+* Warning cards
+* Risk tables
+* Students needing attention
+
+━━━━━━━━━━━━━━━━━━━
+8. PERFORMANCE TREND ANALYSIS
+━━━━━━━━━━━━━━━━━━━
+
+Add:
+
+* Average performance trend graph
+* Subject-wise trend graph
+* Student comparison trends
+* Attendance vs score analysis
+* Stress vs performance analysis
+
+Use interactive Plotly charts.
+
+━━━━━━━━━━━━━━━━━━━
+9. MULTI-STUDENT COMPARISON
+━━━━━━━━━━━━━━━━━━━
+
+Allow selecting multiple students.
+
+Compare:
+
+* Subject marks
+* Average
+* Attendance
+* Study hours
+* Stress level
+* Participation
+
+Display:
+
+* Grouped bar charts
+* Radar/spider charts if possible
+* Trend comparison charts
+
+━━━━━━━━━━━━━━━━━━━
+10. ADVANCED PDF EXPORT SYSTEM
+━━━━━━━━━━━━━━━━━━━
+
+VERY IMPORTANT:
+Each dashboard tab must have its own Download Report button at the bottom.
+
+Create separate PDF reports for:
+
+* Overview Dashboard
+* Student Analysis
+* Insights Dashboard
+* Teacher Dashboard
+
+Each report MUST include:
+
+* Same metrics visible in dashboard
+* Same charts
+* Same tables
+* Same insights
+* Leaderboard
+* Risk analysis
+* Trend charts
+* AI insights
+* Student analysis
+
+Use:
+
+* ReportLab
+* Plotly image export via Kaleido
+
+PDFs should visually resemble dashboard sections professionally.
+
+━━━━━━━━━━━━━━━━━━━
+11. UI/UX IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━
+
+Enhance dashboard visually:
+
+* Modern responsive layout
+* Better spacing
+* Styled cards
+* Colored metric containers
+* Section dividers
+* Better chart placement
+* Cleaner dashboard appearance
+* Professional analytics feel
+
+Use:
+
+* Custom CSS inside Streamlit
+* Responsive columns
+* Better typography
+
+━━━━━━━━━━━━━━━━━━━
+12. CODE STRUCTURE
+━━━━━━━━━━━━━━━━━━━
+
+Organize code cleanly into sections:
+
+* Config
+* Imports
+* Data loading
+* Preprocessing
+* Feature engineering
+* ML models
+* AI functions
+* Offline chatbot
+* Gemini integration
+* Dashboard tabs
+* Charts
+* PDF generation
+
+Add proper comments throughout.
+
+━━━━━━━━━━━━━━━━━━━
+13. REQUIRED LIBRARIES
+━━━━━━━━━━━━━━━━━━━
+
+Use:
+
+* streamlit
+* pandas
+* numpy
+* scikit-learn
+* plotly
+* reportlab
+* kaleido
+* google-generativeai
+
+━━━━━━━━━━━━━━━━━━━
+14. FINAL OUTPUT REQUIREMENTS
+━━━━━━━━━━━━━━━━━━━
+
+Return:
+
+* FULL FINAL CODE ONLY
+* Fully integrated version
+* No placeholders
+* No pseudo-code
+* No missing sections
+* Production-ready implementation
+* Keep current functionality intact
+* Ensure all features work together properly
+
+After this prompt, I will paste my existing Streamlit code. Extend that exact codebase carefully.
+
+this is streamlit_app.py
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+import plotly.express as px
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import StringIO
+
+# ----------------------------
+# PAGE CONFIG
+# ----------------------------
+st.set_page_config(page_title="Student Intelligence System", layout="wide")
+
+st.title("🎓 Smart Student Performance Intelligence System")
+
+# ----------------------------
+# SAMPLE DATA
+# ----------------------------
+@st.cache_data
+def get_sample_csv():
+    return """Name,Math,Science,English,Physics,Chemistry,Computer,Attendance,Study_Hours,Previous_Score,Assignments,Sports,Participation,Sleep_Hours,Screen_Time,Stress_Level
+Aarav,78,85,80,82,79,88,90,3,75,80,1,7,7,3,4
+Diya,45,50,48,42,46,55,60,1,52,50,0,4,5,6,8
+Rahul,88,92,90,91,89,95,95,4,85,90,1,9,7,2,3
+Ananya,60,58,62,65,61,67,70,2,65,60,0,5,6,4,5
+Kiran,35,40,38,32,36,42,55,1,45,40,0,3,5,7,9
+Sneha,82,78,85,80,83,87,88,3,80,85,1,8,7,3,4
+Meera,91,89,94,93,92,96,96,5,90,95,1,10,8,2,2
+Simran,92,95,94,96,93,98,98,5,91,96,1,10,8,2,2
+"""
+
+# ----------------------------
+# SIDEBAR
+# ----------------------------
+st.sidebar.title("📊 Controls")
+
+st.sidebar.download_button(
+    "📥 Download Sample Dataset",
+    data=get_sample_csv(),
+    file_name="students_sample.csv",
+    mime="text/csv"
+)
+
+uploaded_file = st.sidebar.file_uploader("📂 Upload CSV", type=["csv"])
+
+def load_sample():
+    return pd.read_csv(StringIO(get_sample_csv()))
+
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    st.sidebar.success("Custom dataset uploaded")
+else:
+    df = load_sample()
+    st.sidebar.info("Using sample dataset")
+
+# ----------------------------
+# CLEAN DATA
+# ----------------------------
+df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+df = df.loc[:, ~df.columns.duplicated()]
+
+numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+name_col = [col for col in df.columns if "name" in col][0]
+
+df = df.fillna(df.mean(numeric_only=True))
+
+# ----------------------------
+# FEATURES
+# ----------------------------
+target_cols = ["attendance", "study_hours", "previous_score"]
+subject_cols = [col for col in numeric_cols if col not in target_cols]
+
+df["Average"] = df[subject_cols].mean(axis=1)
+df["Trend"] = df["Average"] - df.get("previous_score", 0)
+
+def get_risk(row):
+    if row["Average"] < 40 or row.get("attendance", 100) < 60:
+        return "High"
+    elif row["Average"] < 60:
+        return "Moderate"
+    return "Low"
+
+df["Risk"] = df.apply(get_risk, axis=1)
+
+# ----------------------------
+# MODEL (Linear Regression)
+# ----------------------------
+features = subject_cols.copy()
+extra_cols = ["attendance", "study_hours", "assignments",
+              "sports", "participation", "sleep_hours",
+              "screen_time", "stress_level"]
+
+for col in extra_cols:
+    if col in df.columns:
+        features.append(col)
+
+features = list(dict.fromkeys(features))
+
+model = LinearRegression()
+model.fit(df[features], df["Average"])
+
+# ----------------------------
+# TABS UI
+# ----------------------------
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Overview",
+    "👤 Student Analysis",
+    "📈 Insights",
+    "📂 Dataset"
+])
+
+# ----------------------------
+# OVERVIEW
+# ----------------------------
+with tab1:
+    st.subheader("📊 Class Dashboard")
+
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Avg Score", round(df["Average"].mean(), 2))
+    col2.metric("Top Score", round(df["Average"].max(), 2))
+    col3.metric("Lowest Score", round(df["Average"].min(), 2))
+    col4.metric("High Risk", len(df[df["Risk"] == "High"]))
+
+    st.markdown("---")
+
+    colA, colB = st.columns(2)
+    with colA:
+        st.plotly_chart(px.histogram(df, x="Average"), use_container_width=True)
+    with colB:
+        st.plotly_chart(px.pie(df, names="Risk"), use_container_width=True)
+
+    top = df.loc[df["Average"].idxmax()]
+    st.success(f"🏆 Top Performer: {top[name_col]}")
+
+# ----------------------------
+# STUDENT ANALYSIS
+# ----------------------------
+with tab2:
+    st.subheader("👤 Student Analysis")
+
+    student = st.selectbox("Select Student", df[name_col])
+    row = df[df[name_col] == student].iloc[0]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Average", round(row["Average"], 2))
+    col2.metric("Trend", round(row["Trend"], 2))
+    col3.metric("Attendance", row.get("attendance", "N/A"))
+
+    st.plotly_chart(
+        px.bar(
+            x=subject_cols,
+            y=[row[col] for col in subject_cols]
+        ),
+        use_container_width=True
+    )
+
+    st.subheader("Progress")
+    for sub in subject_cols:
+        st.write(sub)
+        st.progress(int(row[sub]))
+
+    weak = min(subject_cols, key=lambda x: row[x])
+    st.error(f"Weak Subject: {weak}")
+
+    pred = model.predict([[row[col] for col in features]])
+    st.success(f"Predicted Score: {round(pred[0],2)}")
+
+    if st.button("Generate AI Insight"):
+        if row["Risk"] == "High":
+            st.write("High risk. Improve study hours and attendance.")
+        elif row["Risk"] == "Moderate":
+            st.write("Moderate performance. Improve consistency.")
+        else:
+            st.write("Good performance.")
+
+    q = st.text_input("Ask AI")
+    if q:
+        st.write("Focus on consistency and practice.")
+
+# ----------------------------
+# INSIGHTS
+# ----------------------------
+with tab3:
+    st.subheader("📈 Class Insights")
+
+    corr = df.select_dtypes(include=np.number).corr()
+    st.plotly_chart(px.imshow(corr, text_auto=True), use_container_width=True)
+
+    st.plotly_chart(
+        px.line(df, x=name_col, y=subject_cols, markers=True),
+        use_container_width=True
+    )
+
+    risk_filter = st.selectbox("Filter by Risk", ["All", "High", "Moderate", "Low"])
+
+    if risk_filter != "All":
+        filtered = df[df["Risk"] == risk_filter]
+    else:
+        filtered = df
+
+    st.dataframe(filtered)
+
+# ----------------------------
+# DATASET
+# ----------------------------
+with tab4:
+    st.subheader("📂 Dataset View")
+
+    st.write(f"Rows: {df.shape[0]} | Columns: {df.shape[1]}")
+    st.dataframe(df)
+
+    st.subheader("Statistics")
+    st.dataframe(df.describe())
+
+# ----------------------------
+# PDF REPORT
+# ----------------------------
+def generate_pdf(row):
+    doc = SimpleDocTemplate("report.pdf")
+    styles = getSampleStyleSheet()
+
+    content = [
+        Paragraph("Student Report", styles["Title"]),
+        Spacer(1, 10),
+        Paragraph(f"Name: {row['name']}", styles["Normal"]),
+        Paragraph(f"Average: {row['Average']}", styles["Normal"]),
+        Paragraph(f"Risk: {row['Risk']}", styles["Normal"]),
+    ]
+
+    doc.build(content)
+    return "report.pdf"
+
+if "row" in locals():
+    if st.button("Download Report"):
+        file = generate_pdf(row)
+        with open(file, "rb") as f:
+            st.download_button("Download PDF", f, "report.pdf")
+
+next requirements.txt
+fastapi==0.109.0
+uvicorn==0.27.0
+pydantic==2.5.3
+openai==1.12.0
+python-dotenv==1.0.0
+thefuzz==0.22.1
+python-Levenshtein==0.25.0
+
