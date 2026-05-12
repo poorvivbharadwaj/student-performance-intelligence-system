@@ -3,7 +3,8 @@
 # =============================================================================
 # Features: Pass/Fail, Leaderboard, Teacher Dashboard, Smart Insights,
 #           Offline Chatbot, Gemini AI, Early Warning, Trend Analysis,
-#           Multi-Student Comparison, PDF Export, UI Improvements
+#           Multi-Student Comparison, PDF Export, UI Improvements,
+#           Goal Tracking with personalized study plans
 # =============================================================================
 
 # ─────────────────────────────────────────────
@@ -727,13 +728,14 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
     "👩‍🏫 Teacher Dashboard",
     "📂 Dataset",
     "🤖 AI Chatbot",
+    "🎯 Goal Tracking",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -1229,3 +1231,435 @@ with tab6:
         "- Specific student details (e.g. 'Tell me about Aarav')\n"
         "- Rankings and trends"
     )
+
+# ═══════════════════════════════════════════════════
+# TAB 7 — GOAL TRACKING
+# ═══════════════════════════════════════════════════
+with tab7:
+    st.subheader("🎯 Goal Tracking & Study Plans")
+    st.caption("Set target scores per subject for each student and track progress toward those goals.")
+
+    # ── Session state for persisting goals
+    if "goals" not in st.session_state:
+        st.session_state["goals"] = {}
+
+    # ── Mode selector
+    mode = st.radio(
+        "View mode",
+        ["Individual Student", "Class Overview"],
+        horizontal=True,
+    )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # INDIVIDUAL STUDENT MODE
+    # ─────────────────────────────────────────────
+    if mode == "Individual Student":
+        goal_student = st.selectbox("Select Student", df[name_col].tolist(), key="goal_student_select")
+        s_row = df[df[name_col] == goal_student].iloc[0]
+
+        st.markdown(f"#### Set Target Scores for **{goal_student}**")
+        st.caption("Adjust the sliders to set the target score for each subject. Current scores are shown alongside.")
+
+        # Retrieve saved goals or default to current score + 10 (capped at 100)
+        saved = st.session_state["goals"].get(goal_student, {})
+
+        targets = {}
+        cols_per_row = 3
+        subject_chunks = [subject_cols[i:i+cols_per_row] for i in range(0, len(subject_cols), cols_per_row)]
+
+        for chunk in subject_chunks:
+            row_cols = st.columns(len(chunk))
+            for col_ui, sub in zip(row_cols, chunk):
+                current_score = float(s_row[sub])
+                default_target = min(100, int(current_score) + 10)
+                saved_target = saved.get(sub, default_target)
+                with col_ui:
+                    targets[sub] = st.slider(
+                        f"{sub.title()}",
+                        min_value=0,
+                        max_value=100,
+                        value=int(saved_target),
+                        key=f"goal_{goal_student}_{sub}",
+                        help=f"Current: {current_score:.0f}",
+                    )
+
+        if st.button("💾 Save Goals", key="save_goals_btn"):
+            st.session_state["goals"][goal_student] = targets
+            st.success(f"Goals saved for {goal_student}!")
+
+        # Use the in-progress slider values for display
+        st.session_state["goals"][goal_student] = targets
+
+        st.markdown("---")
+
+        # ── Gap analysis
+        st.markdown(f"#### 📊 Progress Toward Goals — {goal_student}")
+
+        gap_data = []
+        for sub in subject_cols:
+            current = float(s_row[sub])
+            target = float(targets[sub])
+            gap = target - current
+            pct = min(100, (current / target * 100)) if target > 0 else 100
+            status = "✅ Achieved" if current >= target else "⏳ In Progress"
+            gap_data.append({
+                "Subject": sub.title(),
+                "Current": current,
+                "Target": target,
+                "Gap": gap,
+                "Progress %": round(pct, 1),
+                "Status": status,
+            })
+
+        gap_df = pd.DataFrame(gap_data)
+
+        # Bullet / progress chart
+        fig_bullet = go.Figure()
+        for _, grow in gap_df.iterrows():
+            color = "#4CAF50" if grow["Current"] >= grow["Target"] else "#2196F3"
+            fig_bullet.add_trace(go.Bar(
+                name=grow["Subject"],
+                x=[grow["Subject"]],
+                y=[grow["Current"]],
+                marker_color=color,
+                text=f"{grow['Current']:.0f}",
+                textposition="outside",
+            ))
+            fig_bullet.add_trace(go.Scatter(
+                x=[grow["Subject"]],
+                y=[grow["Target"]],
+                mode="markers",
+                marker=dict(symbol="line-ew", size=20, color="#f44336",
+                            line=dict(width=3, color="#f44336")),
+                name=f"{grow['Subject']} Target",
+                showlegend=False,
+            ))
+
+        fig_bullet.update_layout(
+            title=f"Current Score vs Target — {goal_student}",
+            yaxis=dict(range=[0, 105], title="Score"),
+            xaxis_title="Subject",
+            barmode="group",
+            showlegend=False,
+            height=400,
+        )
+        st.plotly_chart(fig_bullet, use_container_width=True)
+
+        # Progress percentage bar chart
+        fig_pct = px.bar(
+            gap_df,
+            x="Subject",
+            y="Progress %",
+            color="Progress %",
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title=f"Goal Completion Rate — {goal_student}",
+            text="Progress %",
+        )
+        fig_pct.add_hline(y=100, line_dash="dash", line_color="green",
+                           annotation_text="Goal Reached")
+        fig_pct.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_pct.update_layout(yaxis=dict(range=[0, 115]), coloraxis_showscale=False)
+        st.plotly_chart(fig_pct, use_container_width=True)
+
+        # Gap table with status
+        st.markdown("#### Gap Summary Table")
+        display_gap = gap_df.copy()
+        display_gap["Gap"] = display_gap["Gap"].apply(lambda x: f"+{x:.1f}" if x > 0 else f"{x:.1f}")
+        st.dataframe(display_gap, use_container_width=True)
+
+        st.markdown("---")
+
+        # ── Personalized study plan
+        st.markdown(f"#### 📋 Personalized Study Plan — {goal_student}")
+
+        critical = gap_df[gap_df["Gap"].apply(lambda x: float(str(x).replace("+","")) if isinstance(x, str) else x) > 15].sort_values("Progress %")
+        moderate = gap_df[(gap_df["Gap"].apply(lambda x: float(str(x).replace("+","")) if isinstance(x, str) else x) > 0) &
+                          (gap_df["Gap"].apply(lambda x: float(str(x).replace("+","")) if isinstance(x, str) else x) <= 15)].sort_values("Progress %")
+        achieved = gap_df[gap_df["Status"] == "✅ Achieved"]
+
+        raw_gap_df = pd.DataFrame(gap_data)
+
+        if len(raw_gap_df[raw_gap_df["Gap"] > 15]) > 0:
+            st.error("🔴 **Critical Focus Areas** — more than 15 points below target")
+            for _, g in raw_gap_df[raw_gap_df["Gap"] > 15].sort_values("Gap", ascending=False).iterrows():
+                with st.expander(f"📖 {g['Subject']} — Gap: {g['Gap']:.0f} points (Current: {g['Current']:.0f} → Target: {g['Target']:.0f})"):
+                    weeks_needed = max(1, int(g["Gap"] / 5))
+                    st.markdown(f"""
+**Study Plan for {g['Subject'].title()}:**
+- **Daily practice:** Dedicate at least **45–60 minutes/day** to {g['Subject'].title()} exercises
+- **Weekly target:** Aim to close **5 points of the gap per week** (~{weeks_needed} week{'s' if weeks_needed > 1 else ''} to reach goal)
+- **Resources:** Review textbook chapters, attempt past exam papers, and seek teacher help for difficult topics
+- **Technique:** Use active recall — solve problems without looking at notes first, then check answers
+- **Track progress:** Re-test yourself every week on {g['Subject'].title()} topics to measure improvement
+- **Study group:** Consider forming a study group focused on {g['Subject'].title()} with higher-performing peers
+                    """)
+
+        if len(raw_gap_df[(raw_gap_df["Gap"] > 0) & (raw_gap_df["Gap"] <= 15)]) > 0:
+            st.warning("🟠 **Moderate Improvement Needed** — within 15 points of target")
+            for _, g in raw_gap_df[(raw_gap_df["Gap"] > 0) & (raw_gap_df["Gap"] <= 15)].sort_values("Gap", ascending=False).iterrows():
+                with st.expander(f"📗 {g['Subject']} — Gap: {g['Gap']:.0f} points (Current: {g['Current']:.0f} → Target: {g['Target']:.0f})"):
+                    weeks_needed = max(1, int(g["Gap"] / 5))
+                    st.markdown(f"""
+**Study Plan for {g['Subject'].title()}:**
+- **Daily practice:** 30 minutes of focused revision on {g['Subject'].title()}
+- **Weekly target:** Close **5 points of the gap per week** (~{weeks_needed} week{'s' if weeks_needed > 1 else ''} to reach goal)
+- **Technique:** Focus on weak sub-topics within {g['Subject'].title()} — use flashcards or summary notes
+- **Assignments:** Complete all assigned practice problems and review any graded feedback carefully
+- **Consistency:** Short, regular sessions are more effective than occasional long cramming sessions
+                    """)
+
+        if len(raw_gap_df[raw_gap_df["Gap"] <= 0]) > 0:
+            st.success("✅ **Goals Already Achieved** — maintain and stretch further")
+            achieved_subjects = ", ".join(raw_gap_df[raw_gap_df["Gap"] <= 0]["Subject"].tolist())
+            st.markdown(f"Great work on: **{achieved_subjects}**! Consider raising the target to keep challenging yourself.")
+
+        # Overall recommendation
+        st.markdown("---")
+        st.markdown("#### 🧠 Overall Recommendation")
+        total_gap = raw_gap_df["Gap"].clip(lower=0).sum()
+        subjects_behind = len(raw_gap_df[raw_gap_df["Gap"] > 0])
+        avg_progress = raw_gap_df["Progress %"].mean()
+
+        if avg_progress >= 95:
+            st.success(f"🏆 **{goal_student}** is performing exceptionally close to all targets (avg goal completion: {avg_progress:.1f}%). Consider raising the targets to maintain challenge and growth.")
+        elif avg_progress >= 80:
+            st.info(f"👍 **{goal_student}** is making strong progress (avg goal completion: {avg_progress:.1f}%). Focus on the {subjects_behind} subject(s) still below target. Total gap to close: {total_gap:.0f} points.")
+        elif avg_progress >= 60:
+            st.warning(f"📚 **{goal_student}** needs consistent effort (avg goal completion: {avg_progress:.1f}%). {subjects_behind} subjects are below target with a total gap of {total_gap:.0f} points. A structured daily study plan is recommended.")
+        else:
+            st.error(f"🚨 **{goal_student}** is significantly below targets (avg goal completion: {avg_progress:.1f}%). Immediate intervention is needed — consider one-on-one teacher sessions, reduced screen time, and a strict study schedule.")
+
+    # ─────────────────────────────────────────────
+    # CLASS OVERVIEW MODE
+    # ─────────────────────────────────────────────
+    else:
+        st.markdown("#### 🏫 Class-wide Goal Overview")
+        st.info("Set a single class-wide target for each subject, then see how every student measures up.")
+
+        # Class-wide target sliders
+        st.markdown("**Set Class Targets per Subject:**")
+        class_targets = {}
+        cols_per_row = 3
+        subject_chunks = [subject_cols[i:i+cols_per_row] for i in range(0, len(subject_cols), cols_per_row)]
+        for chunk in subject_chunks:
+            row_cols = st.columns(len(chunk))
+            for col_ui, sub in zip(row_cols, chunk):
+                default_t = int(df[sub].mean()) + 10
+                with col_ui:
+                    class_targets[sub] = st.slider(
+                        f"{sub.title()} target",
+                        min_value=0,
+                        max_value=100,
+                        value=min(100, default_t),
+                        key=f"class_goal_{sub}",
+                    )
+
+        st.markdown("---")
+
+        # Build progress matrix for all students
+        progress_rows = []
+        for _, srow in df.iterrows():
+            sname = srow[name_col]
+            pcts = []
+            for sub in subject_cols:
+                t = class_targets[sub]
+                pct = min(100, (srow[sub] / t * 100)) if t > 0 else 100
+                pcts.append(round(pct, 1))
+            avg_pct = round(sum(pcts) / len(pcts), 1)
+            subjects_met = sum(1 for p in pcts if p >= 100)
+            progress_rows.append({
+                "Student": sname,
+                **{f"{sub.title()} %": pct for sub, pct in zip(subject_cols, pcts)},
+                "Avg Goal %": avg_pct,
+                "Subjects Met": f"{subjects_met}/{len(subject_cols)}",
+            })
+
+        prog_df = pd.DataFrame(progress_rows).sort_values("Avg Goal %", ascending=False)
+
+        # Heatmap of goal completion
+        heat_data = prog_df[["Student"] + [f"{s.title()} %" for s in subject_cols]].set_index("Student")
+        fig_heat = px.imshow(
+            heat_data,
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title="Goal Completion Heatmap (% of Target Reached per Subject)",
+            text_auto=True,
+            aspect="auto",
+        )
+        fig_heat.update_layout(coloraxis_colorbar=dict(title="% of Target"))
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+        # Avg goal completion bar chart
+        fig_avg = px.bar(
+            prog_df,
+            x="Student",
+            y="Avg Goal %",
+            color="Avg Goal %",
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title="Average Goal Completion Rate per Student",
+            text="Avg Goal %",
+        )
+        fig_avg.add_hline(y=100, line_dash="dash", line_color="green",
+                           annotation_text="All Goals Met")
+        fig_avg.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_avg.update_layout(yaxis=dict(range=[0, 115]), coloraxis_showscale=False)
+        st.plotly_chart(fig_avg, use_container_width=True)
+
+        # Summary table
+        st.markdown("#### Student Goal Summary Table")
+        st.dataframe(prog_df, use_container_width=True)
+
+        # Students who met all goals
+        all_met = prog_df[prog_df["Subjects Met"] == f"{len(subject_cols)}/{len(subject_cols)}"]
+        none_met = prog_df[prog_df["Avg Goal %"] < 60]
+
+        if len(all_met) > 0:
+            st.success(f"🏆 Students who met ALL subject targets: **{', '.join(all_met['Student'].tolist())}**")
+        if len(none_met) > 0:
+            st.error(f"🚨 Students below 60% on average goals (need intervention): **{', '.join(none_met['Student'].tolist())}**")
+
+        # Hardest subject to reach target
+        subject_hit_rate = {}
+        for sub in subject_cols:
+            col_name = f"{sub.title()} %"
+            hit_rate = (prog_df[col_name] >= 100).mean() * 100
+            subject_hit_rate[sub.title()] = round(hit_rate, 1)
+
+        hardest = min(subject_hit_rate, key=subject_hit_rate.get)
+        easiest = max(subject_hit_rate, key=subject_hit_rate.get)
+        st.info(f"📌 Hardest subject to meet target: **{hardest}** (only {subject_hit_rate[hardest]:.0f}% of students met target)   |   Easiest: **{easiest}** ({subject_hit_rate[easiest]:.0f}% met target)")
+
+        # ── PDF for class overview goals
+        st.markdown("---")
+
+        def make_pdf_goals_class(prog_dataframe, targets_dict):
+            buf = BytesIO()
+            doc = SimpleDocTemplate(buf, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=18, spaceAfter=12)
+            h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=13, spaceAfter=6)
+            normal = styles["Normal"]
+            content = []
+
+            content.append(Paragraph("Class Goal Tracking Report", title_style))
+            content.append(Spacer(1, 10))
+
+            content.append(Paragraph("Class Targets Set", h2_style))
+            tgt_data = [["Subject", "Target Score"]] + [
+                [s.title(), str(v)] for s, v in targets_dict.items()
+            ]
+            tt = Table(tgt_data, colWidths=[3 * inch, 3 * inch])
+            tt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#3F51B5")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#e8eaf6"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("PADDING", (0, 0), (-1, -1), 6),
+            ]))
+            content.append(tt)
+            content.append(Spacer(1, 14))
+
+            content.append(Paragraph("Student Goal Completion Summary", h2_style))
+            col_names = ["Student", "Avg Goal %", "Subjects Met"]
+            pd_data = [col_names] + [
+                [r["Student"], f"{r['Avg Goal %']:.1f}%", r["Subjects Met"]]
+                for _, r in prog_dataframe.iterrows()
+            ]
+            pt = Table(pd_data, colWidths=[2.5 * inch, 2 * inch, 2 * inch])
+            pt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#009688")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#e0f2f1"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("PADDING", (0, 0), (-1, -1), 6),
+            ]))
+            content.append(pt)
+
+            doc.build(content)
+            return buf.getvalue()
+
+        pdf_goals = make_pdf_goals_class(prog_df, class_targets)
+        st.download_button(
+            "📄 Download Class Goal Report (PDF)",
+            data=pdf_goals,
+            file_name="class_goal_report.pdf",
+            mime="application/pdf",
+        )
+
+    # ── Individual student PDF (shown in both modes)
+    if mode == "Individual Student" and goal_student:
+        st.markdown("---")
+
+        def make_pdf_goals_student(student_name, s_row_data, tgts, raw_gaps):
+            buf = BytesIO()
+            doc = SimpleDocTemplate(buf, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=18, spaceAfter=12)
+            h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=13, spaceAfter=6)
+            normal = styles["Normal"]
+            content = []
+
+            content.append(Paragraph(f"Goal Tracking Report — {student_name}", title_style))
+            content.append(Spacer(1, 10))
+
+            content.append(Paragraph("Subject Goals & Progress", h2_style))
+            goal_table_data = [["Subject", "Current", "Target", "Gap", "Progress %", "Status"]] + [
+                [
+                    g["Subject"],
+                    f"{g['Current']:.1f}",
+                    f"{g['Target']:.1f}",
+                    f"{g['Gap']:+.1f}",
+                    f"{g['Progress %']:.1f}%",
+                    g["Status"],
+                ]
+                for g in raw_gaps
+            ]
+            gt = Table(goal_table_data, colWidths=[1.2*inch, 0.9*inch, 0.9*inch, 0.7*inch, 1*inch, 1.5*inch])
+            gt.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#9C27B0")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#f8f0ff"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("PADDING", (0, 0), (-1, -1), 5),
+            ]))
+            content.append(gt)
+            content.append(Spacer(1, 14))
+
+            content.append(Paragraph("Study Recommendations", h2_style))
+            for g in raw_gaps:
+                if g["Gap"] > 15:
+                    priority = "CRITICAL"
+                    weeks = max(1, int(g["Gap"] / 5))
+                    rec = (f"{g['Subject']} needs urgent attention (gap: {g['Gap']:.0f} pts). "
+                           f"Dedicate 45-60 min/day. Estimated {weeks} week(s) to reach goal with consistent effort.")
+                elif g["Gap"] > 0:
+                    weeks = max(1, int(g["Gap"] / 5))
+                    priority = "MODERATE"
+                    rec = (f"{g['Subject']} needs steady improvement (gap: {g['Gap']:.0f} pts). "
+                           f"30 min/day of focused revision. Estimated {weeks} week(s) to reach goal.")
+                else:
+                    priority = "ACHIEVED"
+                    rec = f"{g['Subject']} target achieved! Consider raising the target to keep improving."
+                content.append(Paragraph(f"<b>[{priority}] {g['Subject']}:</b> {rec}", normal))
+                content.append(Spacer(1, 4))
+
+            doc.build(content)
+            return buf.getvalue()
+
+        pdf_stu_goals = make_pdf_goals_student(goal_student, s_row, targets, gap_data)
+        st.download_button(
+            "📄 Download Student Goal Report (PDF)",
+            data=pdf_stu_goals,
+            file_name=f"goal_report_{goal_student.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+        )
