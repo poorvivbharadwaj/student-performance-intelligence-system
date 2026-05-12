@@ -728,7 +728,7 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
@@ -736,6 +736,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "📂 Dataset",
     "🤖 AI Chatbot",
     "🎯 Goal Tracking",
+    "📡 Attendance Forecast",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -1661,5 +1662,479 @@ with tab7:
             "📄 Download Student Goal Report (PDF)",
             data=pdf_stu_goals,
             file_name=f"goal_report_{goal_student.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+        )
+
+# ═══════════════════════════════════════════════════
+# TAB 8 — ATTENDANCE FORECAST
+# ═══════════════════════════════════════════════════
+with tab8:
+    st.subheader("📡 Attendance Risk Forecasting")
+    st.caption(
+        "ML-powered forecast identifying which students are at risk of dropping below "
+        "the 75% attendance threshold, with teacher alert suggestions."
+    )
+
+    # ── Only possible if attendance column exists
+    if "attendance" not in df.columns:
+        st.warning("⚠️ No 'attendance' column found in the dataset. Please upload a CSV that includes attendance data.")
+    else:
+        # ─────────────────────────────────────────────
+        # BUILD ATTENDANCE RISK MODEL
+        # ─────────────────────────────────────────────
+        from sklearn.ensemble import GradientBoostingRegressor, RandomForestClassifier
+        from sklearn.preprocessing import LabelEncoder
+        import warnings
+        warnings.filterwarnings("ignore")
+
+        ATT_THRESHOLD = 75
+
+        # Features that correlate with attendance
+        att_feature_candidates = [
+            "study_hours", "stress_level", "sleep_hours",
+            "screen_time", "participation", "assignments",
+            "sports", "Average",
+        ]
+        att_features = [c for c in att_feature_candidates if c in df.columns]
+
+        # Current attendance labels
+        df["Att_Risk"] = (df["attendance"] < ATT_THRESHOLD).astype(int)
+
+        # Train regressor to predict attendance from other features
+        att_reg = GradientBoostingRegressor(n_estimators=100, random_state=42)
+        att_reg.fit(df[att_features], df["attendance"])
+
+        # Train classifier to flag at-risk students
+        att_clf = RandomForestClassifier(n_estimators=100, random_state=42, class_weight="balanced")
+        att_clf.fit(df[att_features], df["Att_Risk"])
+
+        # ── Simulate "next period" projections using mild perturbations
+        # Stress +1, study_hours −0.3, screen_time +0.5  →  realistic trend for at-risk students
+        np.random.seed(0)
+        df_proj = df.copy()
+        if "stress_level" in df_proj.columns:
+            df_proj["stress_level"] = (df_proj["stress_level"] + np.random.uniform(0, 1, len(df_proj))).clip(upper=10)
+        if "study_hours" in df_proj.columns:
+            df_proj["study_hours"] = (df_proj["study_hours"] - np.random.uniform(0, 0.5, len(df_proj))).clip(lower=0)
+        if "screen_time" in df_proj.columns:
+            df_proj["screen_time"] = (df_proj["screen_time"] + np.random.uniform(0, 0.5, len(df_proj))).clip(upper=10)
+
+        projected_att = att_reg.predict(df_proj[att_features]).clip(0, 100)
+        projected_risk = att_clf.predict(df_proj[att_features])
+        projected_prob = att_clf.predict_proba(df_proj[att_features])[:, 1]
+
+        # ── Assemble forecast table
+        forecast_df = pd.DataFrame({
+            "Student": df[name_col].values,
+            "Current Att %": df["attendance"].round(1).values,
+            "Projected Att %": projected_att.round(1),
+            "Risk Prob %": (projected_prob * 100).round(1),
+            "Projected Risk": ["At Risk" if r == 1 else "Safe" for r in projected_risk],
+            "Risk Level": df["Risk"].values,
+            "Average": df["Average"].round(1).values,
+        })
+        forecast_df = forecast_df.sort_values("Risk Prob %", ascending=False).reset_index(drop=True)
+
+        # ── Feature importance
+        feat_importance = pd.Series(att_reg.feature_importances_, index=att_features).sort_values(ascending=False)
+
+        # ─────────────────────────────────────────────
+        # SUMMARY METRICS
+        # ─────────────────────────────────────────────
+        n_currently_at_risk = int((df["attendance"] < ATT_THRESHOLD).sum())
+        n_projected_at_risk = int((projected_att < ATT_THRESHOLD).sum())
+        n_high_prob = int((projected_prob >= 0.6).sum())
+        avg_projected = projected_att.mean()
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Currently Below 75%", n_currently_at_risk,
+                  delta=None)
+        c2.metric("Projected Below 75%", n_projected_at_risk,
+                  delta=int(n_projected_at_risk - n_currently_at_risk),
+                  delta_color="inverse")
+        c3.metric("High-Probability At Risk (≥60%)", n_high_prob)
+        c4.metric("Avg Projected Attendance", f"{avg_projected:.1f}%")
+
+        st.markdown("---")
+
+        # ─────────────────────────────────────────────
+        # RISK GAUGE / PROBABILITY CHART
+        # ─────────────────────────────────────────────
+        st.markdown("#### 📊 Attendance Drop Risk Probability per Student")
+
+        color_map = forecast_df["Risk Prob %"].apply(
+            lambda x: "#f44336" if x >= 60 else ("#FF9800" if x >= 35 else "#4CAF50")
+        )
+
+        fig_prob = go.Figure(go.Bar(
+            x=forecast_df["Student"],
+            y=forecast_df["Risk Prob %"],
+            marker_color=color_map.tolist(),
+            text=forecast_df["Risk Prob %"].apply(lambda x: f"{x:.0f}%"),
+            textposition="outside",
+        ))
+        fig_prob.add_hline(y=60, line_dash="dash", line_color="#f44336",
+                           annotation_text="High-Risk Threshold (60%)")
+        fig_prob.add_hline(y=35, line_dash="dash", line_color="#FF9800",
+                           annotation_text="Moderate-Risk Threshold (35%)")
+        fig_prob.update_layout(
+            title="Probability of Falling Below 75% Attendance (Next Period)",
+            yaxis=dict(range=[0, 115], title="Risk Probability (%)"),
+            xaxis_title="Student",
+            height=420,
+            showlegend=False,
+        )
+        st.plotly_chart(fig_prob, use_container_width=True)
+
+        # ─────────────────────────────────────────────
+        # CURRENT vs PROJECTED ATTENDANCE
+        # ─────────────────────────────────────────────
+        st.markdown("#### 📉 Current vs Projected Attendance")
+
+        fig_comp = go.Figure()
+        fig_comp.add_trace(go.Bar(
+            name="Current Attendance %",
+            x=forecast_df["Student"],
+            y=forecast_df["Current Att %"],
+            marker_color="#2196F3",
+            text=forecast_df["Current Att %"].apply(lambda x: f"{x:.0f}%"),
+            textposition="outside",
+        ))
+        fig_comp.add_trace(go.Bar(
+            name="Projected Attendance %",
+            x=forecast_df["Student"],
+            y=forecast_df["Projected Att %"],
+            marker_color="#FF9800",
+            text=forecast_df["Projected Att %"].apply(lambda x: f"{x:.0f}%"),
+            textposition="outside",
+        ))
+        fig_comp.add_hline(y=ATT_THRESHOLD, line_dash="dash", line_color="#f44336",
+                           annotation_text="75% Threshold")
+        fig_comp.update_layout(
+            barmode="group",
+            title="Current vs Projected Attendance per Student",
+            yaxis=dict(range=[0, 115], title="Attendance %"),
+            xaxis_title="Student",
+            height=420,
+        )
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+        # ─────────────────────────────────────────────
+        # FEATURE IMPORTANCE
+        # ─────────────────────────────────────────────
+        colA, colB = st.columns(2)
+        with colA:
+            st.markdown("#### 🔍 Key Drivers of Attendance")
+            fig_fi = px.bar(
+                x=feat_importance.values * 100,
+                y=feat_importance.index.str.title(),
+                orientation="h",
+                title="Feature Importance for Attendance Prediction",
+                labels={"x": "Importance (%)", "y": "Factor"},
+                color=feat_importance.values,
+                color_continuous_scale=["#90CAF9", "#1565C0"],
+            )
+            fig_fi.update_layout(coloraxis_showscale=False, yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig_fi, use_container_width=True)
+
+        with colB:
+            st.markdown("#### 🗂 Risk Distribution (Projected)")
+            risk_counts = forecast_df["Projected Risk"].value_counts().reset_index()
+            risk_counts.columns = ["Status", "Count"]
+            fig_rd = px.pie(
+                risk_counts, names="Status", values="Count",
+                color="Status",
+                color_discrete_map={"At Risk": "#f44336", "Safe": "#4CAF50"},
+                title="Projected Risk Distribution",
+            )
+            st.plotly_chart(fig_rd, use_container_width=True)
+
+        st.markdown("---")
+
+        # ─────────────────────────────────────────────
+        # FORECAST TABLE
+        # ─────────────────────────────────────────────
+        st.markdown("#### 📋 Full Forecast Table")
+
+        def style_risk(val):
+            if val == "At Risk":
+                return "background-color:#fff3f3; color:#c62828; font-weight:bold"
+            return "background-color:#f0fff0; color:#2e7d32"
+
+        def style_prob(val):
+            try:
+                v = float(str(val).replace("%", ""))
+                if v >= 60:
+                    return "color:#c62828; font-weight:bold"
+                elif v >= 35:
+                    return "color:#e65100; font-weight:bold"
+                return "color:#2e7d32"
+            except Exception:
+                return ""
+
+        display_fc = forecast_df.copy()
+        st.dataframe(
+            display_fc.style
+                .applymap(style_risk, subset=["Projected Risk"])
+                .applymap(style_prob, subset=["Risk Prob %"]),
+            use_container_width=True,
+        )
+
+        st.markdown("---")
+
+        # ─────────────────────────────────────────────
+        # AUTOMATED TEACHER ALERTS
+        # ─────────────────────────────────────────────
+        st.markdown("#### 🚨 Automated Teacher Alerts")
+        st.caption("Prioritised action list for teachers based on ML forecast results.")
+
+        high_risk_students = forecast_df[forecast_df["Risk Prob %"] >= 60]
+        moderate_risk_students = forecast_df[
+            (forecast_df["Risk Prob %"] >= 35) & (forecast_df["Risk Prob %"] < 60)
+        ]
+        safe_students = forecast_df[forecast_df["Risk Prob %"] < 35]
+
+        if len(high_risk_students) > 0:
+            st.error(f"🔴 **URGENT — {len(high_risk_students)} student(s) with HIGH drop risk (≥60% probability)**")
+            for _, s in high_risk_students.iterrows():
+                delta = s["Projected Att %"] - s["Current Att %"]
+                with st.expander(
+                    f"🚨 {s['Student']} — Risk: {s['Risk Prob %']:.0f}% | "
+                    f"Projected: {s['Projected Att %']:.1f}% ({delta:+.1f}%)"
+                ):
+                    urgency = "URGENT" if s["Projected Att %"] < 60 else "HIGH PRIORITY"
+                    st.markdown(f"**Status:** [{urgency}] Attendance drop forecasted")
+                    st.markdown(f"**Current attendance:** {s['Current Att %']:.1f}%")
+                    st.markdown(f"**Projected next-period attendance:** {s['Projected Att %']:.1f}%")
+                    st.markdown(f"**Academic risk level:** {s['Risk Level']}")
+                    st.markdown(f"**Average score:** {s['Average']:.1f}")
+                    st.markdown("---")
+                    st.markdown("**Recommended Teacher Actions:**")
+                    actions = [
+                        f"📞 Schedule a one-on-one meeting with **{s['Student']}** and their parents/guardian this week.",
+                        "📝 Review recent absence records and identify any recurring patterns (days of week, specific subjects).",
+                        "💬 Conduct a welfare check — ask about personal, health, or motivation challenges.",
+                        "📚 Provide a catch-up plan for missed content so the student doesn't feel overwhelmed on return.",
+                        "🎯 Set a short-term attendance goal (e.g. full attendance for the next 2 weeks) with positive reinforcement.",
+                        "🔔 Flag to the school counsellor if attendance has dropped more than 10% in the past month.",
+                    ]
+                    if "stress_level" in df.columns:
+                        stress_val = df[df[name_col] == s["Student"]]["stress_level"].values
+                        if len(stress_val) > 0 and stress_val[0] >= 7:
+                            actions.append("🧘 Student shows high stress — refer to counselling or wellness program.")
+                    for a in actions:
+                        st.markdown(f"- {a}")
+
+        if len(moderate_risk_students) > 0:
+            st.warning(f"🟠 **MODERATE — {len(moderate_risk_students)} student(s) with moderate drop risk (35–59%)**")
+            for _, s in moderate_risk_students.iterrows():
+                delta = s["Projected Att %"] - s["Current Att %"]
+                with st.expander(
+                    f"⚠️ {s['Student']} — Risk: {s['Risk Prob %']:.0f}% | "
+                    f"Projected: {s['Projected Att %']:.1f}% ({delta:+.1f}%)"
+                ):
+                    st.markdown(f"**Current attendance:** {s['Current Att %']:.1f}%")
+                    st.markdown(f"**Projected next-period attendance:** {s['Projected Att %']:.1f}%")
+                    st.markdown("**Recommended Teacher Actions:**")
+                    st.markdown(
+                        f"- 💬 Check in with **{s['Student']}** informally — a brief conversation can prevent further disengagement.\n"
+                        "- 📣 Send a friendly reminder about the importance of consistent attendance.\n"
+                        "- 📊 Monitor attendance weekly and escalate if any further decline is observed.\n"
+                        "- 🏫 Ensure the student feels included and engaged in class activities."
+                    )
+
+        if len(safe_students) > 0:
+            with st.expander(f"✅ {len(safe_students)} student(s) projected as SAFE (risk < 35%)"):
+                safe_list = ", ".join(safe_students["Student"].tolist())
+                st.success(f"The following students are projected to maintain healthy attendance: **{safe_list}**")
+                st.markdown("Continue monitoring and recognise consistent attendance positively.")
+
+        st.markdown("---")
+
+        # ─────────────────────────────────────────────
+        # INDIVIDUAL DEEP DIVE
+        # ─────────────────────────────────────────────
+        st.markdown("#### 🔎 Individual Attendance Deep Dive")
+        dive_student = st.selectbox("Select a student to analyse:", df[name_col].tolist(), key="att_dive_select")
+        d_row = df[df[name_col] == dive_student].iloc[0]
+        d_fc = forecast_df[forecast_df["Student"] == dive_student].iloc[0]
+
+        dc1, dc2, dc3 = st.columns(3)
+        dc1.metric("Current Attendance", f"{d_fc['Current Att %']:.1f}%")
+        dc2.metric(
+            "Projected Attendance",
+            f"{d_fc['Projected Att %']:.1f}%",
+            delta=f"{d_fc['Projected Att %'] - d_fc['Current Att %']:+.1f}%",
+            delta_color="inverse",
+        )
+        dc3.metric("Drop Risk Probability", f"{d_fc['Risk Prob %']:.1f}%")
+
+        # Factor breakdown radar for this student
+        radar_factors = att_features
+        student_vals = [float(d_row.get(f, 0)) for f in radar_factors]
+        class_vals = [float(df[f].mean()) for f in radar_factors]
+
+        fig_radar_att = go.Figure()
+        fig_radar_att.add_trace(go.Scatterpolar(
+            r=student_vals + [student_vals[0]],
+            theta=[f.replace("_", " ").title() for f in radar_factors] + [radar_factors[0].replace("_", " ").title()],
+            fill="toself",
+            name=dive_student,
+            line_color="#2196F3",
+        ))
+        fig_radar_att.add_trace(go.Scatterpolar(
+            r=class_vals + [class_vals[0]],
+            theta=[f.replace("_", " ").title() for f in radar_factors] + [radar_factors[0].replace("_", " ").title()],
+            fill="toself",
+            name="Class Average",
+            line_color="#9E9E9E",
+            opacity=0.5,
+        ))
+        fig_radar_att.update_layout(
+            polar=dict(radialaxis=dict(visible=True)),
+            title=f"Factor Profile: {dive_student} vs Class Average",
+            height=380,
+        )
+        st.plotly_chart(fig_radar_att, use_container_width=True)
+
+        # Attendance scenario simulator
+        st.markdown("##### 🧪 Scenario Simulator")
+        st.caption("Adjust factors below to simulate how changes might affect projected attendance.")
+
+        sim_cols = st.columns(min(4, len(att_features)))
+        sim_vals = {}
+        for i, feat in enumerate(att_features):
+            with sim_cols[i % len(sim_cols)]:
+                curr_val = float(d_row.get(feat, df[feat].mean()))
+                sim_vals[feat] = st.slider(
+                    feat.replace("_", " ").title(),
+                    min_value=0.0,
+                    max_value=float(df[feat].max()),
+                    value=round(curr_val, 1),
+                    step=0.5,
+                    key=f"sim_{dive_student}_{feat}",
+                )
+
+        sim_input = pd.DataFrame([sim_vals])[att_features]
+        sim_predicted_att = float(att_reg.predict(sim_input)[0])
+        sim_risk_prob = float(att_clf.predict_proba(sim_input)[0][1]) * 100
+        sim_predicted_att = max(0, min(100, sim_predicted_att))
+
+        sc1, sc2, sc3 = st.columns(3)
+        sc1.metric("Simulated Attendance", f"{sim_predicted_att:.1f}%",
+                   delta=f"{sim_predicted_att - d_fc['Current Att %']:+.1f}%",
+                   delta_color="normal")
+        sc2.metric("Simulated Drop Risk", f"{sim_risk_prob:.1f}%",
+                   delta=f"{sim_risk_prob - d_fc['Risk Prob %']:+.1f}%",
+                   delta_color="inverse")
+        if sim_predicted_att >= ATT_THRESHOLD:
+            sc3.success(f"✅ Above safe threshold ({ATT_THRESHOLD}%)")
+        else:
+            sc3.error(f"⚠️ Below threshold ({ATT_THRESHOLD}%)")
+
+        st.markdown("---")
+
+        # ─────────────────────────────────────────────
+        # PDF REPORT
+        # ─────────────────────────────────────────────
+        def make_pdf_attendance(fc_df, feat_imp, n_high, n_mod, threshold):
+            buf = BytesIO()
+            doc = SimpleDocTemplate(buf, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle("Title2", parent=styles["Title"], fontSize=18, spaceAfter=12)
+            h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=13, spaceAfter=6)
+            normal = styles["Normal"]
+            content = []
+
+            content.append(Paragraph("Attendance Risk Forecast Report", title_style))
+            content.append(Spacer(1, 10))
+
+            # Summary
+            content.append(Paragraph("Forecast Summary", h2_style))
+            summary = [
+                ["Metric", "Value"],
+                ["Attendance Threshold", f"{threshold}%"],
+                ["High-Risk Students (≥60% drop prob)", str(n_high)],
+                ["Moderate-Risk Students (35–59%)", str(n_mod)],
+                ["Avg Projected Attendance", f"{fc_df['Projected Att %'].mean():.1f}%"],
+                ["Students Projected Below Threshold", str(int((fc_df['Projected Att %'] < threshold).sum()))],
+            ]
+            t = Table(summary, colWidths=[3.5 * inch, 3 * inch])
+            t.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#1565C0")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#E3F2FD"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("PADDING", (0, 0), (-1, -1), 6),
+            ]))
+            content.append(t)
+            content.append(Spacer(1, 14))
+
+            # Full forecast table
+            content.append(Paragraph("Student-level Forecast", h2_style))
+            cols = ["Student", "Current Att %", "Projected Att %", "Risk Prob %", "Projected Risk"]
+            fc_rows = [cols] + [
+                [r["Student"], f"{r['Current Att %']:.1f}%",
+                 f"{r['Projected Att %']:.1f}%", f"{r['Risk Prob %']:.1f}%", r["Projected Risk"]]
+                for _, r in fc_df.iterrows()
+            ]
+            ft = Table(fc_rows, colWidths=[1.5*inch, 1.2*inch, 1.3*inch, 1.1*inch, 1.2*inch])
+            ft.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#1565C0")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#E3F2FD"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("PADDING", (0, 0), (-1, -1), 5),
+            ]))
+            content.append(ft)
+            content.append(Spacer(1, 14))
+
+            # Key drivers
+            content.append(Paragraph("Key Drivers of Attendance (Feature Importance)", h2_style))
+            fi_rows = [["Factor", "Importance %"]] + [
+                [f.replace("_", " ").title(), f"{v*100:.1f}%"]
+                for f, v in feat_imp.items()
+            ]
+            fit = Table(fi_rows, colWidths=[3.5 * inch, 3 * inch])
+            fit.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), rl_colors.HexColor("#0D47A1")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), rl_colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [rl_colors.HexColor("#E8EAF6"), rl_colors.white]),
+                ("GRID", (0, 0), (-1, -1), 0.5, rl_colors.grey),
+                ("FONTSIZE", (0, 0), (-1, -1), 10),
+                ("PADDING", (0, 0), (-1, -1), 5),
+            ]))
+            content.append(fit)
+            content.append(Spacer(1, 14))
+
+            # High-risk alert list
+            hr = fc_df[fc_df["Risk Prob %"] >= 60]
+            if len(hr) > 0:
+                content.append(Paragraph("🚨 High-Risk Teacher Alerts", h2_style))
+                for _, s in hr.iterrows():
+                    content.append(Paragraph(
+                        f"<b>{s['Student']}</b>: Current {s['Current Att %']:.1f}% → "
+                        f"Projected {s['Projected Att %']:.1f}% | Risk {s['Risk Prob %']:.0f}%. "
+                        f"Action: Schedule parent meeting, welfare check, and catch-up plan immediately.",
+                        normal,
+                    ))
+                    content.append(Spacer(1, 4))
+
+            doc.build(content)
+            return buf.getvalue()
+
+        pdf_att = make_pdf_attendance(
+            forecast_df, feat_importance,
+            len(high_risk_students), len(moderate_risk_students), ATT_THRESHOLD,
+        )
+        st.download_button(
+            "📄 Download Attendance Forecast Report (PDF)",
+            data=pdf_att,
+            file_name="attendance_forecast_report.pdf",
             mime="application/pdf",
         )
