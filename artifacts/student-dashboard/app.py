@@ -728,7 +728,7 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
@@ -739,6 +739,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "📡 Attendance Forecast",
     "📜 Report Cards",
     "📨 Parent Comms",
+    "📈 Progress Tracker",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -3155,3 +3156,383 @@ with tab10:
         )
     else:
         st.info("No communications logged yet this session.")
+
+# ═══════════════════════════════════════════════════
+# TAB 11 — STUDENT PROGRESS TRACKER
+# ═══════════════════════════════════════════════════
+with tab11:
+    st.subheader("📈 Student Progress Tracker")
+    st.caption(
+        "Record scores across multiple assessment periods, visualise growth with trend lines, "
+        "and get a predictive forecast for the next term."
+    )
+
+    # ─────────────────────────────────────────────
+    # SESSION STATE — persistent assessment ledger
+    # ─────────────────────────────────────────────
+    if "progress_records" not in st.session_state:
+        # Pre-seed with two synthetic periods so charts work immediately
+        seed_rows = []
+        for _, srow in df.iterrows():
+            for period_i, period_name in enumerate(["Term 1", "Term 2"]):
+                noise = np.random.uniform(-8, 8, len(subject_cols))
+                for j, sub in enumerate(subject_cols):
+                    base = float(srow[sub])
+                    score = float(np.clip(base + noise[j] + period_i * 2, 0, 100))
+                    seed_rows.append({
+                        "Student":  srow[name_col],
+                        "Period":   period_name,
+                        "Subject":  sub.title(),
+                        "Score":    round(score, 1),
+                    })
+        st.session_state.progress_records = pd.DataFrame(seed_rows)
+
+    pr_df = st.session_state.progress_records
+
+    # ─────────────────────────────────────────────
+    # ADD / EDIT SECTION
+    # ─────────────────────────────────────────────
+    with st.expander("➕ Add New Assessment Period Scores", expanded=False):
+        st.markdown("Enter scores for one student across all subjects for a new assessment period.")
+        ae_col1, ae_col2 = st.columns(2)
+        with ae_col1:
+            ae_student = st.selectbox("Student:", df[name_col].tolist(), key="pt_ae_student")
+        with ae_col2:
+            existing_periods = sorted(pr_df["Period"].unique().tolist())
+            ae_period = st.text_input(
+                "Assessment Period (e.g. Term 3, Mid-Year, Final):",
+                value=f"Term {len(existing_periods) + 1}",
+                key="pt_ae_period",
+            )
+
+        st.markdown("**Subject Scores:**")
+        ae_score_cols = st.columns(min(len(subject_cols), 4))
+        ae_scores = {}
+        for idx, sub in enumerate(subject_cols):
+            with ae_score_cols[idx % len(ae_score_cols)]:
+                ae_scores[sub] = st.number_input(
+                    sub.title(), min_value=0.0, max_value=100.0, value=50.0,
+                    step=0.5, key=f"pt_ae_{sub}",
+                )
+
+        if st.button("💾 Save Assessment Scores", key="pt_save_scores"):
+            if ae_period.strip():
+                new_rows = []
+                for sub, sc in ae_scores.items():
+                    # Remove existing entry for same student/period/subject if any
+                    mask = (
+                        (pr_df["Student"] == ae_student) &
+                        (pr_df["Period"]  == ae_period.strip()) &
+                        (pr_df["Subject"] == sub.title())
+                    )
+                    st.session_state.progress_records = st.session_state.progress_records[~mask]
+                    new_rows.append({
+                        "Student": ae_student,
+                        "Period":  ae_period.strip(),
+                        "Subject": sub.title(),
+                        "Score":   round(float(sc), 1),
+                    })
+                st.session_state.progress_records = pd.concat(
+                    [st.session_state.progress_records, pd.DataFrame(new_rows)],
+                    ignore_index=True,
+                )
+                pr_df = st.session_state.progress_records
+                st.success(f"✅ Scores saved for {ae_student} — {ae_period.strip()}")
+            else:
+                st.warning("Please enter a period name.")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # INDIVIDUAL STUDENT TRACKER
+    # ─────────────────────────────────────────────
+    st.markdown("#### 👤 Individual Student Progress")
+
+    pt_student = st.selectbox(
+        "Select student:", df[name_col].tolist(), key="pt_student_sel"
+    )
+
+    stu_df = pr_df[pr_df["Student"] == pt_student].copy()
+
+    if stu_df.empty:
+        st.info("No progress records for this student yet. Add some above.")
+    else:
+        # Period order: preserve insertion / alpha order
+        period_order = sorted(stu_df["Period"].unique().tolist(),
+                              key=lambda p: (len(p), p))
+
+        # ── Multi-subject trend lines
+        fig_trend = px.line(
+            stu_df,
+            x="Period", y="Score", color="Subject",
+            markers=True,
+            title=f"📈 {pt_student} — Score Trend by Subject",
+            category_orders={"Period": period_order},
+        )
+        fig_trend.add_hline(
+            y=50, line_dash="dash", line_color="#f44336",
+            annotation_text="Pass Threshold",
+        )
+        fig_trend.update_layout(height=380, hovermode="x unified")
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        # ── Period-by-period average
+        avg_by_period = (
+            stu_df.groupby("Period")["Score"].mean()
+            .reindex(period_order)
+            .reset_index()
+        )
+        avg_by_period.columns = ["Period", "Average"]
+
+        fig_avg = px.bar(
+            avg_by_period, x="Period", y="Average",
+            color="Average",
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title=f"Overall Average per Period — {pt_student}",
+            text="Average",
+        )
+        fig_avg.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+        fig_avg.add_hline(y=50, line_dash="dash", line_color="#f44336")
+        fig_avg.update_layout(coloraxis_showscale=False, height=300)
+        st.plotly_chart(fig_avg, use_container_width=True)
+
+        # ── Growth delta table
+        st.markdown("**Period-over-Period Growth**")
+        if len(period_order) >= 2:
+            delta_rows = []
+            for sub in stu_df["Subject"].unique():
+                sub_data = (
+                    stu_df[stu_df["Subject"] == sub]
+                    .set_index("Period")["Score"]
+                    .reindex(period_order)
+                )
+                deltas = sub_data.diff()
+                row = {"Subject": sub}
+                for i, p in enumerate(period_order):
+                    row[p] = f"{sub_data[p]:.0f}%" if not pd.isna(sub_data[p]) else "—"
+                    if i > 0 and not pd.isna(deltas[p]):
+                        arrow = "▲" if deltas[p] > 0 else ("▼" if deltas[p] < 0 else "→")
+                        row[p] += f" {arrow}{abs(deltas[p]):.0f}"
+                delta_rows.append(row)
+            st.dataframe(pd.DataFrame(delta_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("Add at least 2 periods to see growth deltas.")
+
+        st.markdown("---")
+
+        # ── Predictive next-term forecast (linear extrapolation per subject)
+        st.markdown("#### 🔮 Next-Term Score Prediction")
+        if len(period_order) >= 2:
+            forecast_rows = []
+            for sub in sorted(stu_df["Subject"].unique()):
+                sub_scores = (
+                    stu_df[stu_df["Subject"] == sub]
+                    .set_index("Period")["Score"]
+                    .reindex(period_order)
+                    .dropna()
+                    .values
+                )
+                if len(sub_scores) >= 2:
+                    x_vals = np.arange(len(sub_scores)).reshape(-1, 1)
+                    from sklearn.linear_model import LinearRegression as _LR
+                    _lr = _LR().fit(x_vals, sub_scores)
+                    next_score = float(np.clip(_lr.predict([[len(sub_scores)]])[0], 0, 100))
+                    slope      = _lr.coef_[0]
+                    trend_lbl  = "↑ Improving" if slope > 1 else ("↓ Declining" if slope < -1 else "→ Stable")
+                else:
+                    next_score = sub_scores[-1] if len(sub_scores) else 50.0
+                    slope      = 0.0
+                    trend_lbl  = "→ Stable"
+                forecast_rows.append({
+                    "Subject":        sub,
+                    "Last Score":     f"{sub_scores[-1]:.0f}%",
+                    "Predicted Next": f"{next_score:.1f}%",
+                    "Trend":          trend_lbl,
+                    "Slope (pts/term)": f"{slope:+.1f}",
+                })
+
+            fc_df = pd.DataFrame(forecast_rows)
+            fc_col1, fc_col2 = st.columns([2, 1])
+            with fc_col1:
+                fig_fc = px.bar(
+                    fc_df, x="Subject", y=fc_df["Predicted Next"].str.replace("%","").astype(float),
+                    color=fc_df["Predicted Next"].str.replace("%","").astype(float),
+                    color_continuous_scale=["#f44336","#FF9800","#4CAF50"],
+                    range_color=[0, 100],
+                    title="Predicted Scores — Next Term",
+                    labels={"y": "Predicted Score (%)"},
+                    text=fc_df["Predicted Next"],
+                )
+                fig_fc.update_traces(textposition="outside")
+                fig_fc.add_hline(y=50, line_dash="dash", line_color="#f44336",
+                                 annotation_text="Pass")
+                fig_fc.update_layout(coloraxis_showscale=False, height=300)
+                st.plotly_chart(fig_fc, use_container_width=True)
+            with fc_col2:
+                st.markdown("**Forecast Table**")
+                st.dataframe(fc_df, use_container_width=True, hide_index=True)
+
+            # Predicted overall average
+            pred_avg = fc_df["Predicted Next"].str.replace("%","").astype(float).mean()
+            pred_grade = (
+                "A+" if pred_avg >= 90 else "A" if pred_avg >= 80 else
+                "B+" if pred_avg >= 70 else "B" if pred_avg >= 60 else
+                "C"  if pred_avg >= 50 else "D" if pred_avg >= 40 else "F"
+            )
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Predicted Overall Average", f"{pred_avg:.1f}%")
+            c2.metric("Predicted Grade", pred_grade)
+            improving = sum(1 for r in forecast_rows if "↑" in r["Trend"])
+            c3.metric("Subjects Improving", f"{improving}/{len(forecast_rows)}")
+        else:
+            st.info("Add at least 2 assessment periods to generate predictions.")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # CLASS-WIDE TREND VIEW
+    # ─────────────────────────────────────────────
+    st.markdown("#### 🏫 Class-Wide Progress Overview")
+
+    all_periods = sorted(pr_df["Period"].unique().tolist(), key=lambda p: (len(p), p))
+
+    # Class average per period
+    class_avg_period = (
+        pr_df.groupby("Period")["Score"]
+        .mean()
+        .reindex(all_periods)
+        .reset_index()
+    )
+    class_avg_period.columns = ["Period", "Class Average"]
+
+    fig_class = px.line(
+        class_avg_period, x="Period", y="Class Average",
+        markers=True, title="Class Average Score Over Time",
+        color_discrete_sequence=["#1565C0"],
+    )
+    fig_class.add_hline(y=50, line_dash="dash", line_color="#f44336",
+                        annotation_text="Pass Threshold")
+    fig_class.update_layout(height=300)
+    st.plotly_chart(fig_class, use_container_width=True)
+
+    # Subject progress heatmap: students × periods (average across subjects)
+    st.markdown("**Student × Period Average Heatmap**")
+    pivot = (
+        pr_df.groupby(["Student", "Period"])["Score"]
+        .mean()
+        .unstack(fill_value=np.nan)
+        .reindex(columns=all_periods)
+    )
+
+    fig_heat = px.imshow(
+        pivot.values,
+        x=all_periods,
+        y=pivot.index.tolist(),
+        color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+        zmin=0, zmax=100,
+        title="Student Performance Heatmap (Average Score per Period)",
+        labels={"x": "Period", "y": "Student", "color": "Avg Score"},
+        aspect="auto",
+    )
+    fig_heat.update_layout(height=max(300, len(df) * 26))
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    # Most improved / most declined students
+    if len(all_periods) >= 2:
+        first_p = all_periods[0]
+        last_p  = all_periods[-1]
+        improvement = []
+        for stu in df[name_col]:
+            s_df = pr_df[pr_df["Student"] == stu]
+            first_avg = s_df[s_df["Period"] == first_p]["Score"].mean()
+            last_avg  = s_df[s_df["Period"] == last_p]["Score"].mean()
+            if not (pd.isna(first_avg) or pd.isna(last_avg)):
+                improvement.append({
+                    "Student":     stu,
+                    f"{first_p} Avg": f"{first_avg:.1f}%",
+                    f"{last_p} Avg":  f"{last_avg:.1f}%",
+                    "Change":      round(last_avg - first_avg, 1),
+                })
+        if improvement:
+            imp_df = pd.DataFrame(improvement).sort_values("Change", ascending=False)
+            imp_col1, imp_col2 = st.columns(2)
+            with imp_col1:
+                st.markdown("🏆 **Most Improved Students**")
+                top5 = imp_df.head(5)[["Student", "Change"]].copy()
+                top5["Change"] = top5["Change"].apply(lambda x: f"+{x:.1f} pts")
+                st.dataframe(top5, use_container_width=True, hide_index=True)
+            with imp_col2:
+                st.markdown("⚠️ **Most Declined Students**")
+                bot5 = imp_df.tail(5)[["Student", "Change"]].copy()
+                bot5 = bot5.sort_values("Change")
+                bot5["Change"] = bot5["Change"].apply(lambda x: f"{x:.1f} pts")
+                st.dataframe(bot5, use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # MULTI-STUDENT COMPARISON OVER TIME
+    # ─────────────────────────────────────────────
+    st.markdown("#### 👥 Multi-Student Comparison")
+    compare_students = st.multiselect(
+        "Select students to compare:",
+        df[name_col].tolist(),
+        default=df[name_col].tolist()[:min(4, len(df))],
+        key="pt_compare_sel",
+    )
+    compare_subject = st.selectbox(
+        "Compare by subject:",
+        ["Overall Average"] + [s.title() for s in subject_cols],
+        key="pt_compare_sub",
+    )
+
+    if compare_students:
+        if compare_subject == "Overall Average":
+            cmp_df = (
+                pr_df[pr_df["Student"].isin(compare_students)]
+                .groupby(["Student", "Period"])["Score"]
+                .mean()
+                .reset_index()
+            )
+            cmp_df.columns = ["Student", "Period", "Score"]
+        else:
+            sub_raw = compare_subject.lower()
+            cmp_df = pr_df[
+                (pr_df["Student"].isin(compare_students)) &
+                (pr_df["Subject"] == compare_subject)
+            ][["Student", "Period", "Score"]].copy()
+
+        if not cmp_df.empty:
+            fig_cmp = px.line(
+                cmp_df,
+                x="Period", y="Score", color="Student",
+                markers=True,
+                title=f"Student Comparison — {compare_subject}",
+                category_orders={"Period": all_periods},
+            )
+            fig_cmp.add_hline(y=50, line_dash="dash", line_color="#f44336",
+                              annotation_text="Pass")
+            fig_cmp.update_layout(height=380, hovermode="x unified")
+            st.plotly_chart(fig_cmp, use_container_width=True)
+        else:
+            st.info("No data for the selected students and subject.")
+    else:
+        st.info("Select at least one student to compare.")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # EXPORT
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📥 Export Progress Data")
+    import io as _pt_io
+    exp_buf = _pt_io.StringIO()
+    st.session_state.progress_records.to_csv(exp_buf, index=False)
+    st.download_button(
+        "📊 Download Full Progress Ledger (CSV)",
+        data=exp_buf.getvalue(),
+        file_name="student_progress_tracker.csv",
+        mime="text/csv",
+        key="pt_export_csv",
+    )
