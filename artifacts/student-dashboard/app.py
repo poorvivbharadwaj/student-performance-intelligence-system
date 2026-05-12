@@ -728,7 +728,7 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
@@ -738,6 +738,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "🎯 Goal Tracking",
     "📡 Attendance Forecast",
     "📜 Report Cards",
+    "📨 Parent Comms",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -2674,3 +2675,483 @@ with tab9:
                     mime="application/zip",
                     key="download_class_zip_btn",
                 )
+
+# ═══════════════════════════════════════════════════
+# TAB 10 — PARENT COMMUNICATION CENTER
+# ═══════════════════════════════════════════════════
+with tab10:
+    st.subheader("📨 Parent Communication Center")
+    st.caption(
+        "Auto-draft personalised email and SMS messages to parents based on each "
+        "student's performance, attendance, risk level, and academic trends."
+    )
+
+    # ─────────────────────────────────────────────
+    # SETTINGS STRIP
+    # ─────────────────────────────────────────────
+    pc1, pc2, pc3 = st.columns(3)
+    with pc1:
+        pc_school   = st.text_input("🏫 School Name", value="Greenwood International School", key="pc_school")
+    with pc2:
+        pc_teacher  = st.text_input("👩‍🏫 Class Teacher", value="Ms. Priya Sharma", key="pc_teacher")
+    with pc3:
+        pc_term     = st.text_input("📅 Term", value="Term 2 — 2025–26", key="pc_term")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # MESSAGE TONE & TYPE SELECTOR
+    # ─────────────────────────────────────────────
+    col_type, col_tone, col_lang = st.columns(3)
+    with col_type:
+        msg_type = st.selectbox(
+            "📋 Message Type",
+            ["Email", "SMS / Short Message", "Both"],
+            key="pc_msg_type",
+        )
+    with col_tone:
+        msg_tone = st.selectbox(
+            "🎨 Communication Tone",
+            ["Formal & Professional", "Warm & Encouraging", "Urgent / Concern"],
+            key="pc_tone",
+        )
+    with col_lang:
+        msg_focus = st.selectbox(
+            "🎯 Focus Area",
+            ["Overall Performance", "Attendance", "Risk / Early Warning", "Subject-Specific"],
+            key="pc_focus",
+        )
+
+    # Optional subject focus
+    focus_subject = None
+    if msg_focus == "Subject-Specific":
+        focus_subject = st.selectbox("Select subject:", subject_cols, key="pc_focus_sub")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # MESSAGE GENERATORS
+    # ─────────────────────────────────────────────
+    def _salutation(tone: str) -> str:
+        return {
+            "Formal & Professional": "Dear Parent / Guardian,",
+            "Warm & Encouraging":    "Dear Parent,",
+            "Urgent / Concern":      "Dear Parent / Guardian,",
+        }[tone]
+
+    def _closing(tone: str, teacher: str, school: str) -> str:
+        return {
+            "Formal & Professional": f"Yours sincerely,\n{teacher}\n{school}",
+            "Warm & Encouraging":    f"Warm regards,\n{teacher}\n{school}",
+            "Urgent / Concern":      f"We urge you to contact us at the earliest.\nSincerely,\n{teacher}\n{school}",
+        }[tone]
+
+    def _grade_phrase(avg: float) -> str:
+        if avg >= 90: return "exceptional"
+        if avg >= 80: return "excellent"
+        if avg >= 70: return "very good"
+        if avg >= 60: return "good"
+        if avg >= 50: return "satisfactory"
+        return "below the required standard"
+
+    def generate_email(row: pd.Series, tone: str, focus: str,
+                       teacher: str, school: str, term: str,
+                       focus_sub: str | None = None) -> str:
+        name   = row[name_col]
+        fname  = name.split()[0]
+        avg    = row["Average"]
+        risk   = row["Risk"]
+        pf     = row["Pass_Fail"]
+        rank   = int(row["Rank"])
+        trend  = row.get("Trend", 0)
+        att    = row.get("attendance", None)
+        study  = row.get("study_hours", None)
+        weak   = min(subject_cols, key=lambda x: row[x])
+        strong = max(subject_cols, key=lambda x: row[x])
+
+        sal   = _salutation(tone)
+        close = _closing(tone, teacher, school)
+
+        intro = f"We are writing to you regarding {fname}'s academic progress during {term} at {school}."
+
+        if focus == "Overall Performance":
+            grade_p = _grade_phrase(avg)
+            body = (
+                f"{fname} has achieved an overall average of {avg:.1f}% this term, "
+                f"which is {grade_p}. "
+            )
+            if pf == "Pass":
+                body += f"{fname} has successfully met the passing criteria this term. "
+            else:
+                body += f"Unfortunately, {fname} has not met the passing criteria and requires immediate attention. "
+            if trend > 5:
+                body += f"We are pleased to note an improvement of {trend:.1f} points compared to last term. "
+            elif trend < -5:
+                body += f"We have observed a decline of {abs(trend):.1f} points from the previous assessment, which is a cause for concern. "
+            body += f"{fname}'s strongest subject is {strong.title()} ({row[strong]:.0f}%). "
+            if row[weak] < 60:
+                body += f"{weak.title()} ({row[weak]:.0f}%) needs focused revision and extra support. "
+            if rank <= 3:
+                body += f"We are proud to share that {fname} ranks #{rank} in the class — a commendable achievement. "
+
+        elif focus == "Attendance":
+            if att is None:
+                body = f"We would like to draw your attention to {fname}'s attendance record this term. Regular attendance is key to academic success. "
+            else:
+                body = f"{fname}'s attendance this term stands at {att:.0f}%. "
+                if att >= 90:
+                    body += "This is commendable and we encourage this consistency. "
+                elif att >= 75:
+                    body += "While this is within acceptable limits, we encourage greater regularity. "
+                else:
+                    body += (
+                        "This is below our minimum threshold of 75% and is significantly impacting academic performance. "
+                        "We strongly request your support in ensuring regular attendance. "
+                    )
+
+        elif focus == "Risk / Early Warning":
+            if risk == "High":
+                body = (
+                    f"We wish to bring to your urgent attention that {fname} has been identified "
+                    f"as HIGH RISK based on current academic and attendance trends. "
+                    f"With an average of {avg:.1f}% and {'an attendance of ' + str(att) + '%' if att else 'irregular attendance'}, "
+                    f"immediate intervention is required. "
+                    f"We invite you to schedule a meeting with {teacher} at your earliest convenience. "
+                )
+            elif risk == "Moderate":
+                body = (
+                    f"{fname} has been flagged as MODERATE RISK this term. "
+                    f"While not yet critical, performance trends indicate that without additional effort, "
+                    f"results may decline further. "
+                    f"We recommend regular check-ins and dedicated study time at home. "
+                )
+            else:
+                body = (
+                    f"We are pleased to inform you that {fname} is performing well and currently shows LOW RISK "
+                    f"of academic underperformance. Please help {fname} maintain this positive trajectory. "
+                )
+
+        else:  # Subject-Specific
+            sub  = focus_sub or weak
+            sc   = row[sub]
+            ca   = df[sub].mean()
+            diff = sc - ca
+            body = (
+                f"This communication specifically concerns {fname}'s performance in {sub.title()}. "
+                f"{fname} scored {sc:.0f}% compared to the class average of {ca:.1f}% "
+                f"({'above' if diff >= 0 else 'below'} average by {abs(diff):.1f} points). "
+            )
+            if sc < 50:
+                body += (
+                    f"This score is below the passing threshold and requires urgent attention. "
+                    f"We recommend engaging a tutor and allocating additional study time for {sub.title()}. "
+                )
+            elif sc >= 80:
+                body += f"This is an excellent result. We encourage {fname} to maintain this level of dedication. "
+
+        if study is not None:
+            if study < 2:
+                body += f"Our records indicate {fname} is currently studying approximately {study:.1f} hours daily — increasing this would help greatly. "
+            elif study >= 3:
+                body += f"We commend {fname}'s dedication with {study:.1f} hours of daily study. "
+
+        action = ""
+        if risk == "High" or pf == "Fail":
+            action = (
+                "\n\nWe strongly encourage you to:\n"
+                "  • Schedule a parent-teacher meeting at your earliest convenience\n"
+                "  • Arrange additional academic support or tutoring\n"
+                "  • Monitor daily homework and study time\n"
+                "  • Ensure regular and punctual attendance"
+            )
+        elif risk == "Moderate":
+            action = (
+                "\n\nWe suggest:\n"
+                "  • Reviewing study routines at home\n"
+                "  • Encouraging consistent revision of weaker subjects\n"
+                "  • Contacting the school if you notice further difficulty"
+            )
+
+        return f"{sal}\n\n{intro}\n\n{body.strip()}{action}\n\n{close}"
+
+    def generate_sms(row: pd.Series, tone: str, focus: str,
+                     teacher: str, school: str, term: str,
+                     focus_sub: str | None = None) -> str:
+        name  = row[name_col].split()[0]
+        avg   = row["Average"]
+        risk  = row["Risk"]
+        att   = row.get("attendance", None)
+        pf    = row["Pass_Fail"]
+
+        if focus == "Overall Performance":
+            grade_p = _grade_phrase(avg)
+            msg = f"[{school}] Dear Parent, {name} achieved {avg:.1f}% ({grade_p}) in {term}. "
+            msg += "Pass ✓" if pf == "Pass" else "FAILED — urgent action needed ✗"
+        elif focus == "Attendance":
+            att_str = f"{att:.0f}%" if att is not None else "data not available"
+            msg = f"[{school}] Dear Parent, {name}'s attendance is {att_str} in {term}. "
+            msg += "Great attendance! 👍" if (att or 0) >= 90 else ("Please improve regularity." if (att or 0) >= 75 else "URGENT: Attendance below 75% — please contact school.")
+        elif focus == "Risk / Early Warning":
+            emoji = {"High": "🚨", "Moderate": "⚠️", "Low": "✅"}.get(risk, "")
+            msg = f"[{school}] {emoji} {name} is {risk} risk this term (avg: {avg:.1f}%). "
+            msg += "Please contact the school immediately." if risk == "High" else ("Please monitor progress." if risk == "Moderate" else "Keep up the great work!")
+        else:
+            sub = focus_sub or min(subject_cols, key=lambda x: row[x])
+            sc  = row[sub]
+            msg = f"[{school}] Dear Parent, {name} scored {sc:.0f}% in {sub.title()} ({term}). "
+            msg += "Needs improvement — please arrange extra support." if sc < 50 else ("Excellent result! 🎉" if sc >= 80 else "Good progress.")
+
+        msg += f" — {teacher}"
+        return msg
+
+    # ─────────────────────────────────────────────
+    # STUDENT SELECTOR / BATCH
+    # ─────────────────────────────────────────────
+    st.markdown("#### 👤 Preview — Individual Student Message")
+
+    pc_student = st.selectbox(
+        "Select student:", df[name_col].tolist(), key="pc_student_sel"
+    )
+    pc_row = df[df[name_col] == pc_student].iloc[0]
+
+    # Generate messages
+    show_email = msg_type in ["Email", "Both"]
+    show_sms   = msg_type in ["SMS / Short Message", "Both"]
+
+    if show_email:
+        email_text = generate_email(
+            pc_row, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject
+        )
+        st.markdown("**📧 Email Draft**")
+        edited_email = st.text_area(
+            "Edit before sending:", value=email_text, height=320, key="pc_email_preview"
+        )
+        col_ce1, col_ce2 = st.columns(2)
+        with col_ce1:
+            st.download_button(
+                f"📄 Download Email (.txt)",
+                data=edited_email,
+                file_name=f"email_{pc_student.replace(' ', '_')}.txt",
+                mime="text/plain",
+                key="pc_dl_email_single",
+            )
+        with col_ce2:
+            char_count = len(edited_email)
+            st.metric("Character count", char_count)
+
+    if show_sms:
+        sms_text = generate_sms(
+            pc_row, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject
+        )
+        st.markdown("**📱 SMS Draft**")
+        edited_sms = st.text_area(
+            "Edit before sending:", value=sms_text, height=80, key="pc_sms_preview"
+        )
+        sms_chars = len(edited_sms)
+        sms_parts = max(1, -(-sms_chars // 160))  # ceiling div
+        col_cs1, col_cs2, col_cs3 = st.columns(3)
+        with col_cs1:
+            st.metric("Characters", sms_chars)
+        with col_cs2:
+            st.metric("SMS parts", sms_parts)
+        with col_cs3:
+            st.download_button(
+                "📄 Download SMS (.txt)",
+                data=edited_sms,
+                file_name=f"sms_{pc_student.replace(' ', '_')}.txt",
+                mime="text/plain",
+                key="pc_dl_sms_single",
+            )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # BATCH GENERATION — ALL STUDENTS
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📦 Batch Message Generator — Entire Class")
+    st.caption(
+        "Generates personalised messages for every student and packages them "
+        "into a single downloadable file."
+    )
+
+    # Filter options
+    batch_filter = st.selectbox(
+        "Generate messages for:",
+        ["All students", "High Risk only", "Moderate Risk only", "Failing students only", "Passing students only"],
+        key="pc_batch_filter",
+    )
+
+    filter_map = {
+        "All students":          df[name_col].tolist(),
+        "High Risk only":        df[df["Risk"] == "High"][name_col].tolist(),
+        "Moderate Risk only":    df[df["Risk"] == "Moderate"][name_col].tolist(),
+        "Failing students only": df[df["Pass_Fail"] == "Fail"][name_col].tolist(),
+        "Passing students only": df[df["Pass_Fail"] == "Pass"][name_col].tolist(),
+    }
+    batch_students = filter_map[batch_filter]
+    st.info(f"**{len(batch_students)} students** will receive messages under the current filter.")
+
+    if st.button("🚀 Generate All Messages", key="pc_gen_batch_btn"):
+        with st.spinner(f"Drafting messages for {len(batch_students)} students…"):
+            lines = []
+            for sname in batch_students:
+                srow = df[df[name_col] == sname].iloc[0]
+                lines.append("=" * 72)
+                lines.append(f"STUDENT: {sname}  |  Risk: {srow['Risk']}  |  Avg: {srow['Average']:.1f}%  |  {srow['Pass_Fail']}")
+                lines.append("=" * 72)
+                if show_email:
+                    em = generate_email(srow, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject)
+                    lines.append("--- EMAIL ---")
+                    lines.append(em)
+                    lines.append("")
+                if show_sms:
+                    sm = generate_sms(srow, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject)
+                    lines.append("--- SMS ---")
+                    lines.append(sm)
+                lines.append("")
+
+            batch_text = "\n".join(lines)
+
+        st.success(f"✅ Messages drafted for {len(batch_students)} students!")
+
+        # Preview first 3
+        with st.expander("👁️ Preview first 3 messages"):
+            preview_lines = "\n".join(lines[:min(120, len(lines))])
+            st.code(preview_lines, language=None)
+
+        st.download_button(
+            "📥 Download All Messages (.txt)",
+            data=batch_text,
+            file_name=f"parent_messages_{batch_filter.replace(' ', '_')}_{pc_term.replace(' ', '_')}.txt",
+            mime="text/plain",
+            key="pc_dl_batch_txt",
+        )
+
+        # Also offer CSV with one row per student
+        csv_rows = []
+        for sname in batch_students:
+            srow = df[df[name_col] == sname].iloc[0]
+            csv_rows.append({
+                "Student":   sname,
+                "Risk":      srow["Risk"],
+                "Average":   f"{srow['Average']:.1f}%",
+                "Pass/Fail": srow["Pass_Fail"],
+                "Email":     generate_email(srow, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject).replace("\n", " "),
+                "SMS":       generate_sms(srow, msg_tone, msg_focus, pc_teacher, pc_school, pc_term, focus_subject),
+            })
+        csv_df = pd.DataFrame(csv_rows)
+
+        import io as _io
+        csv_buf = _io.StringIO()
+        csv_df.to_csv(csv_buf, index=False)
+        st.download_button(
+            "📊 Download Messages as CSV (mail-merge ready)",
+            data=csv_buf.getvalue(),
+            file_name=f"parent_messages_{batch_filter.replace(' ', '_')}.csv",
+            mime="text/csv",
+            key="pc_dl_batch_csv",
+        )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # COMMUNICATION ANALYTICS
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📊 Communication Overview")
+
+    # Priority breakdown pie
+    risk_counts = df["Risk"].value_counts().reset_index()
+    risk_counts.columns = ["Risk Level", "Students"]
+
+    pf_counts = df["Pass_Fail"].value_counts().reset_index()
+    pf_counts.columns = ["Status", "Students"]
+
+    col_an1, col_an2, col_an3 = st.columns(3)
+
+    with col_an1:
+        fig_risk_pie = px.pie(
+            risk_counts, names="Risk Level", values="Students",
+            color="Risk Level",
+            color_discrete_map={"High": "#f44336", "Moderate": "#FF9800", "Low": "#4CAF50"},
+            title="Messages by Risk Level",
+        )
+        fig_risk_pie.update_layout(height=280, margin=dict(t=40, b=0))
+        st.plotly_chart(fig_risk_pie, use_container_width=True)
+
+    with col_an2:
+        fig_pf_pie = px.pie(
+            pf_counts, names="Status", values="Students",
+            color="Status",
+            color_discrete_map={"Pass": "#4CAF50", "Fail": "#f44336"},
+            title="Pass vs Fail Split",
+        )
+        fig_pf_pie.update_layout(height=280, margin=dict(t=40, b=0))
+        st.plotly_chart(fig_pf_pie, use_container_width=True)
+
+    with col_an3:
+        # Priority table
+        urgent   = len(df[(df["Risk"] == "High") | (df["Pass_Fail"] == "Fail")])
+        watchlist= len(df[(df["Risk"] == "Moderate") & (df["Pass_Fail"] == "Pass")])
+        positive = len(df[(df["Risk"] == "Low") & (df["Pass_Fail"] == "Pass")])
+
+        st.markdown("**Message Priority Breakdown**")
+        st.markdown(f"🚨 **Urgent (High Risk / Failing):** {urgent} students")
+        st.markdown(f"⚠️ **Watchlist (Moderate Risk):** {watchlist} students")
+        st.markdown(f"✅ **Positive Messages (Low Risk / Passing):** {positive} students")
+
+        # Urgent student list
+        urgent_df = df[(df["Risk"] == "High") | (df["Pass_Fail"] == "Fail")][[name_col, "Average", "Risk", "Pass_Fail"]]
+        urgent_df = urgent_df.rename(columns={name_col: "Student"})
+        if not urgent_df.empty:
+            st.markdown("**Urgent Contact List:**")
+            st.dataframe(
+                urgent_df.style.apply(
+                    lambda col: ["background-color: #FFEBEE"] * len(col), axis=0
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    # ─────────────────────────────────────────────
+    # COMMUNICATION LOG (session-based)
+    # ─────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("#### 🗒️ Session Communication Log")
+    st.caption("Track which messages have been generated or downloaded in this session.")
+
+    if "comm_log" not in st.session_state:
+        st.session_state.comm_log = []
+
+    log_entry_name  = st.text_input("Log a sent message — Student name:", key="pc_log_name")
+    log_entry_notes = st.text_input("Notes (optional):", key="pc_log_notes")
+    log_col1, log_col2 = st.columns(2)
+    with log_col1:
+        log_channel = st.selectbox("Channel:", ["Email", "SMS", "Phone Call", "In-Person"], key="pc_log_ch")
+    with log_col2:
+        log_outcome = st.selectbox("Outcome:", ["Sent", "Delivered", "No response", "Meeting scheduled", "Resolved"], key="pc_log_out")
+
+    if st.button("➕ Add to Log", key="pc_log_add_btn"):
+        if log_entry_name.strip():
+            st.session_state.comm_log.append({
+                "Student":  log_entry_name.strip(),
+                "Channel":  log_channel,
+                "Outcome":  log_outcome,
+                "Notes":    log_entry_notes.strip(),
+                "Time":     pd.Timestamp.now().strftime("%Y-%m-%d %H:%M"),
+            })
+            st.success(f"Logged communication for {log_entry_name.strip()}")
+
+    if st.session_state.comm_log:
+        log_df = pd.DataFrame(st.session_state.comm_log)
+        st.dataframe(log_df, use_container_width=True, hide_index=True)
+        log_csv_buf = _io.StringIO()
+        log_df.to_csv(log_csv_buf, index=False)
+        st.download_button(
+            "📥 Export Communication Log (CSV)",
+            data=log_csv_buf.getvalue(),
+            file_name="communication_log.csv",
+            mime="text/csv",
+            key="pc_log_export_btn",
+        )
+    else:
+        st.info("No communications logged yet this session.")
