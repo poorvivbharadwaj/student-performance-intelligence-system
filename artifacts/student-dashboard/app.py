@@ -728,7 +728,7 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
@@ -740,6 +740,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "📜 Report Cards",
     "📨 Parent Comms",
     "📈 Progress Tracker",
+    "🗓️ Study Planner",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -3535,4 +3536,392 @@ with tab11:
         file_name="student_progress_tracker.csv",
         mime="text/csv",
         key="pt_export_csv",
+    )
+
+# ═══════════════════════════════════════════════════
+# TAB 12 — CLASS TIMETABLE & STUDY PLANNER
+# ═══════════════════════════════════════════════════
+with tab12:
+    st.subheader("🗓️ Class Timetable & Personalised Study Planner")
+    st.caption(
+        "Set your weekly class schedule, then generate a personalised daily study plan "
+        "for any student — automatically weighted by their weakest subjects."
+    )
+
+    DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    SLOTS = ["8:00–9:00", "9:00–10:00", "10:00–11:00", "11:30–12:30",
+             "12:30–13:30", "14:00–15:00", "15:00–16:00"]
+
+    DAY_COLORS = {
+        "Monday":    "#E3F2FD",
+        "Tuesday":   "#F3E5F5",
+        "Wednesday": "#E8F5E9",
+        "Thursday":  "#FFF8E1",
+        "Friday":    "#FCE4EC",
+    }
+
+    SUBJECT_COLORS = {}
+    _palette = ["#1565C0","#6A1B9A","#2E7D32","#E65100","#AD1457",
+                "#00695C","#4527A0","#558B2F","#0277BD","#6D4C41"]
+    for _i, _s in enumerate(subject_cols):
+        SUBJECT_COLORS[_s.title()] = _palette[_i % len(_palette)]
+
+    # ─────────────────────────────────────────────
+    # SESSION STATE — timetable grid
+    # ─────────────────────────────────────────────
+    if "timetable" not in st.session_state:
+        # Auto-fill a round-robin timetable from existing subjects
+        _tt = {}
+        _sub_titles = [s.title() for s in subject_cols]
+        _free = "— Free —"
+        for _d in DAYS:
+            _tt[_d] = {}
+            for _si, _slot in enumerate(SLOTS):
+                _tt[_d][_slot] = _sub_titles[(_si + DAYS.index(_d)) % len(_sub_titles)]
+        st.session_state.timetable = _tt
+
+    # ─────────────────────────────────────────────
+    # SECTION 1 — TIMETABLE EDITOR
+    # ─────────────────────────────────────────────
+    with st.expander("✏️ Edit Class Timetable", expanded=True):
+        st.caption("Click any cell dropdown to change the subject taught in that period.")
+        subject_options = ["— Free —"] + [s.title() for s in subject_cols]
+
+        tt_cols = st.columns([1.2] + [1] * len(DAYS))
+        with tt_cols[0]:
+            st.markdown("**Period**")
+        for di, day in enumerate(DAYS):
+            with tt_cols[di + 1]:
+                st.markdown(f"**{day}**")
+
+        for slot in SLOTS:
+            row_cols = st.columns([1.2] + [1] * len(DAYS))
+            with row_cols[0]:
+                st.markdown(f"🕐 {slot}")
+            for di, day in enumerate(DAYS):
+                with row_cols[di + 1]:
+                    current = st.session_state.timetable[day].get(slot, "— Free —")
+                    chosen = st.selectbox(
+                        label="",
+                        options=subject_options,
+                        index=subject_options.index(current) if current in subject_options else 0,
+                        key=f"tt_{day}_{slot}",
+                        label_visibility="collapsed",
+                    )
+                    st.session_state.timetable[day][slot] = chosen
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # SECTION 2 — VISUAL TIMETABLE
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📅 Weekly Class Timetable")
+
+    # Build a DataFrame from the timetable
+    tt_data = {day: [st.session_state.timetable[day].get(slot, "— Free —") for slot in SLOTS]
+               for day in DAYS}
+    tt_display = pd.DataFrame(tt_data, index=SLOTS)
+    tt_display.index.name = "Period"
+
+    # Render as a colour-coded HTML table
+    def _tt_cell(val):
+        if val == "— Free —":
+            return "background-color:#F5F5F5; color:#9E9E9E;"
+        color = SUBJECT_COLORS.get(val, "#1565C0")
+        return f"background-color:{color}22; color:{color}; font-weight:bold;"
+
+    st.dataframe(
+        tt_display.style.applymap(_tt_cell),
+        use_container_width=True,
+        height=290,
+    )
+
+    # Lessons-per-subject summary
+    lesson_counts = {}
+    for day in DAYS:
+        for slot in SLOTS:
+            sub = st.session_state.timetable[day].get(slot, "— Free —")
+            if sub != "— Free —":
+                lesson_counts[sub] = lesson_counts.get(sub, 0) + 1
+
+    if lesson_counts:
+        lc_df = pd.DataFrame(
+            sorted(lesson_counts.items(), key=lambda x: -x[1]),
+            columns=["Subject", "Lessons/Week"]
+        )
+        fig_lc = px.bar(
+            lc_df, x="Subject", y="Lessons/Week",
+            color="Subject",
+            color_discrete_map=SUBJECT_COLORS,
+            title="Lessons per Subject per Week",
+            text="Lessons/Week",
+        )
+        fig_lc.update_traces(textposition="outside")
+        fig_lc.update_layout(showlegend=False, height=280)
+        st.plotly_chart(fig_lc, use_container_width=True)
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # SECTION 3 — PERSONALISED STUDY PLAN GENERATOR
+    # ─────────────────────────────────────────────
+    st.markdown("#### 🎓 Personalised Daily Study Plan")
+    st.caption(
+        "Study time is allocated each day by weighting subjects against the student's "
+        "scores — weakest subjects get the most revision time automatically."
+    )
+
+    sp_col1, sp_col2, sp_col3 = st.columns(3)
+    with sp_col1:
+        sp_student = st.selectbox("Select student:", df[name_col].tolist(), key="sp_student")
+    with sp_col2:
+        sp_hours = st.slider("Total daily study hours:", 1.0, 8.0, 3.0, 0.5, key="sp_hours")
+    with sp_col3:
+        sp_break = st.slider("Break every N minutes:", 20, 60, 45, 5, key="sp_break")
+
+    sp_start = st.time_input("Study session start time:", value=None, key="sp_start")
+    if sp_start is None:
+        import datetime as _dt
+        sp_start = _dt.time(17, 0)
+
+    sp_row = df[df[name_col] == sp_student].iloc[0]
+
+    # Weight = inverse of score (weaker → more time), then normalise
+    raw_weights = {s: max(1.0, 100.0 - float(sp_row[s])) for s in subject_cols}
+    total_w     = sum(raw_weights.values())
+    norm_weights = {s: w / total_w for s, w in raw_weights.items()}
+
+    # Minutes per subject per day
+    total_study_mins = sp_hours * 60
+    sub_mins = {s: round(norm_weights[s] * total_study_mins) for s in subject_cols}
+
+    # ── Subject allocation chart
+    alloc_df = pd.DataFrame([
+        {"Subject": s.title(), "Minutes": sub_mins[s], "Score": float(sp_row[s])}
+        for s in subject_cols
+    ]).sort_values("Minutes", ascending=False)
+
+    al_col1, al_col2 = st.columns(2)
+    with al_col1:
+        fig_alloc = px.bar(
+            alloc_df, x="Subject", y="Minutes",
+            color="Score",
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title=f"Daily Study Allocation — {sp_student}",
+            text="Minutes",
+        )
+        fig_alloc.update_traces(texttemplate="%{text} min", textposition="outside")
+        fig_alloc.update_layout(coloraxis_showscale=True, height=300)
+        st.plotly_chart(fig_alloc, use_container_width=True)
+
+    with al_col2:
+        fig_pie_sp = px.pie(
+            alloc_df, names="Subject", values="Minutes",
+            color="Subject",
+            color_discrete_map=SUBJECT_COLORS,
+            title="Study Time Distribution",
+        )
+        fig_pie_sp.update_layout(height=300)
+        st.plotly_chart(fig_pie_sp, use_container_width=True)
+
+    # ── Day-by-day schedule builder
+    st.markdown("**📋 Daily Schedule (with breaks)**")
+
+    import datetime as _dt
+
+    def build_schedule(start_time: _dt.time, subject_mins: dict,
+                       break_every: int) -> list[dict]:
+        schedule = []
+        current = _dt.datetime.combine(_dt.date.today(), start_time)
+        mins_since_break = 0
+        subjects_queue = []
+        for sub in sorted(subject_mins, key=lambda x: -subject_mins[x]):
+            remaining = subject_mins[sub]
+            chunk = 20  # study in 20-min blocks
+            while remaining > 0:
+                subjects_queue.append((sub.title(), min(chunk, remaining)))
+                remaining -= chunk
+
+        for sub_title, duration in subjects_queue:
+            # Insert break if needed
+            if mins_since_break >= break_every:
+                brk_start = current.strftime("%H:%M")
+                current += _dt.timedelta(minutes=10)
+                schedule.append({
+                    "Time":     brk_start,
+                    "Activity": "☕ Break",
+                    "Duration": "10 min",
+                    "Note":     "Rest, hydrate, stretch",
+                })
+                mins_since_break = 0
+
+            blk_start = current.strftime("%H:%M")
+            current += _dt.timedelta(minutes=duration)
+            blk_end   = current.strftime("%H:%M")
+            schedule.append({
+                "Time":     f"{blk_start}–{blk_end}",
+                "Activity": f"📚 {sub_title}",
+                "Duration": f"{duration} min",
+                "Note":     _study_tip(sub_title, float(sp_row.get(
+                    [s for s in subject_cols if s.title() == sub_title][0], 50))),
+            })
+            mins_since_break += duration
+
+        return schedule
+
+    def _study_tip(subject: str, score: float) -> str:
+        tips = {
+            "low":  ["Focus on fundamentals & past papers",
+                     "Work through practice problems slowly",
+                     "Re-read notes and summarise key points",
+                     "Ask teacher for extra help"],
+            "mid":  ["Review week's material with flashcards",
+                     "Attempt 3 practice questions",
+                     "Consolidate concepts with mind-maps"],
+            "high": ["Challenge yourself with harder problems",
+                     "Help a peer — teaching reinforces learning",
+                     "Explore beyond the syllabus"],
+        }
+        bucket = "low" if score < 50 else ("mid" if score < 75 else "high")
+        return tips[bucket][hash(subject) % len(tips[bucket])]
+
+    schedule_rows = build_schedule(sp_start, sub_mins, sp_break)
+    sched_df = pd.DataFrame(schedule_rows)
+
+    def _sched_style(row):
+        if "Break" in row["Activity"]:
+            return ["background-color:#FFF9C4"] * len(row)
+        sub_name = row["Activity"].replace("📚 ", "")
+        color = SUBJECT_COLORS.get(sub_name, "#1565C0")
+        return [f"background-color:{color}15"] * len(row)
+
+    st.dataframe(
+        sched_df.style.apply(_sched_style, axis=1),
+        use_container_width=True,
+        hide_index=True,
+        height=min(600, len(sched_df) * 38 + 40),
+    )
+
+    # Study tips for weakest 2 subjects
+    weakest = sorted(subject_cols, key=lambda s: float(sp_row[s]))[:2]
+    st.markdown("**💡 Priority Focus Areas**")
+    tip_cols = st.columns(len(weakest))
+    for ti, sub in enumerate(weakest):
+        score = float(sp_row[sub])
+        with tip_cols[ti]:
+            st.markdown(
+                f"**{sub.title()}** — {score:.0f}%  \n"
+                f"*{_study_tip(sub.title(), score)}*  \n"
+                f"Suggested: **{sub_mins[sub]} min/day**"
+            )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # SECTION 4 — BATCH STUDY PLANS EXPORT
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📦 Export Study Plans for All Students")
+
+    if st.button("🖨️ Generate All Study Plans", key="sp_batch_btn"):
+        with st.spinner("Building personalised plans for all students…"):
+            all_plans = []
+            for _, srow in df.iterrows():
+                sname = srow[name_col]
+                rw = {s: max(1.0, 100.0 - float(srow[s])) for s in subject_cols}
+                tw = sum(rw.values())
+                nw = {s: w / tw for s, w in rw.items()}
+                sm = {s: round(nw[s] * sp_hours * 60) for s in subject_cols}
+                sched = build_schedule(sp_start, sm, sp_break)
+                for entry in sched:
+                    entry["Student"] = sname
+                all_plans.extend(sched)
+
+            plans_df = pd.DataFrame(all_plans)[["Student", "Time", "Activity", "Duration", "Note"]]
+            import io as _sp_io
+            sp_buf = _sp_io.StringIO()
+            plans_df.to_csv(sp_buf, index=False)
+
+        st.success(f"✅ Study plans generated for all {len(df)} students!")
+        st.download_button(
+            "📥 Download All Study Plans (CSV)",
+            data=sp_buf.getvalue(),
+            file_name=f"study_plans_all_students.csv",
+            mime="text/csv",
+            key="sp_batch_dl",
+        )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # SECTION 5 — TIMETABLE PDF EXPORT
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📄 Download Timetable as PDF")
+
+    def make_timetable_pdf(timetable: dict, school: str = "Greenwood International School") -> bytes:
+        buf = BytesIO()
+        from reportlab.lib.pagesizes import A4, landscape
+        doc = SimpleDocTemplate(
+            buf, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30,
+            pagesize=landscape(A4),
+        )
+        styles = getSampleStyleSheet()
+        W = 11.69 * 72 - 60
+        content = []
+
+        title_style = ParagraphStyle("TT", fontSize=14, fontName="Helvetica-Bold",
+                                     alignment=1, textColor=rl_colors.HexColor("#1565C0"), spaceAfter=10)
+        content.append(Paragraph(f"{school} — Weekly Class Timetable", title_style))
+
+        header = ["Period"] + DAYS
+        rows   = [header]
+        for slot in SLOTS:
+            row = [slot]
+            for day in DAYS:
+                sub = timetable[day].get(slot, "—")
+                row.append(sub if sub != "— Free —" else "Free")
+            rows.append(row)
+
+        col_w = [W * 0.14] + [W * 0.172] * len(DAYS)
+        tbl = Table(rows, colWidths=col_w)
+        style = TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0),  rl_colors.HexColor("#1565C0")),
+            ("TEXTCOLOR",     (0, 0), (-1, 0),  rl_colors.white),
+            ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+            ("FONTSIZE",      (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [rl_colors.HexColor("#F5F5F5"), rl_colors.white]),
+            ("GRID",          (0, 0), (-1, -1), 0.4, rl_colors.HexColor("#BDBDBD")),
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 7),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ("FONTNAME",      (0, 1), (0, -1),  "Helvetica-Bold"),
+            ("TEXTCOLOR",     (0, 1), (0, -1),  rl_colors.HexColor("#424242")),
+        ])
+        # Colour-code subject cells
+        for ri, slot in enumerate(SLOTS, start=1):
+            for ci, day in enumerate(DAYS, start=1):
+                sub = timetable[day].get(slot, "— Free —")
+                if sub != "— Free —":
+                    hex_c = SUBJECT_COLORS.get(sub, "#1565C0")
+                    style.add("BACKGROUND", (ci, ri), (ci, ri),
+                              rl_colors.HexColor(hex_c + "44"))
+                    style.add("TEXTCOLOR",  (ci, ri), (ci, ri),
+                              rl_colors.HexColor(hex_c))
+                    style.add("FONTNAME",   (ci, ri), (ci, ri), "Helvetica-Bold")
+        tbl.setStyle(style)
+        content.append(tbl)
+        doc.build(content)
+        return buf.getvalue()
+
+    tt_school_name = st.text_input(
+        "School name for PDF:", value="Greenwood International School", key="sp_school_pdf"
+    )
+    tt_pdf_bytes = make_timetable_pdf(st.session_state.timetable, tt_school_name)
+    st.download_button(
+        "📄 Download Timetable PDF",
+        data=tt_pdf_bytes,
+        file_name="class_timetable.pdf",
+        mime="application/pdf",
+        key="sp_tt_pdf_dl",
     )
