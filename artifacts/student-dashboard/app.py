@@ -728,7 +728,7 @@ def make_pdf_insights(data: pd.DataFrame) -> bytes:
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "📊 Overview",
     "👤 Student Analysis",
     "📈 Insights",
@@ -737,6 +737,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "🤖 AI Chatbot",
     "🎯 Goal Tracking",
     "📡 Attendance Forecast",
+    "📜 Report Cards",
 ])
 
 # ═══════════════════════════════════════════════════
@@ -2138,3 +2139,538 @@ with tab8:
             file_name="attendance_forecast_report.pdf",
             mime="application/pdf",
         )
+
+# ═══════════════════════════════════════════════════
+# TAB 9 — REPORT CARDS
+# ═══════════════════════════════════════════════════
+with tab9:
+    st.subheader("📜 End-of-Term Report Card Generator")
+    st.caption(
+        "Generate professional styled report cards for individual students or download "
+        "a complete PDF pack for the entire class."
+    )
+
+    # ─────────────────────────────────────────────
+    # HELPERS
+    # ─────────────────────────────────────────────
+    def score_to_grade(score: float) -> str:
+        if score >= 90: return "A+"
+        elif score >= 80: return "A"
+        elif score >= 70: return "B+"
+        elif score >= 60: return "B"
+        elif score >= 50: return "C"
+        elif score >= 40: return "D"
+        return "F"
+
+    def grade_to_gpa(grade: str) -> str:
+        return {"A+": "4.0", "A": "3.7", "B+": "3.3", "B": "3.0",
+                "C": "2.0", "D": "1.0", "F": "0.0"}.get(grade, "—")
+
+    def score_to_remark(score: float) -> str:
+        if score >= 90: return "Outstanding"
+        elif score >= 80: return "Excellent"
+        elif score >= 70: return "Very Good"
+        elif score >= 60: return "Good"
+        elif score >= 50: return "Satisfactory"
+        elif score >= 40: return "Needs Improvement"
+        return "Unsatisfactory"
+
+    def risk_to_conduct(risk: str) -> str:
+        return {"Low": "Excellent", "Moderate": "Satisfactory", "High": "Needs Attention"}.get(risk, "—")
+
+    def generate_teacher_comment(row: pd.Series, subject_cols_list: list) -> str:
+        name = row[name_col].split()[0]
+        avg = row["Average"]
+        risk = row["Risk"]
+        pf = row["Pass_Fail"]
+        trend = row.get("Trend", 0)
+        att = row.get("attendance", None)
+        stress = row.get("stress_level", None)
+        study = row.get("study_hours", None)
+        weak = min(subject_cols_list, key=lambda x: row[x])
+        strong = max(subject_cols_list, key=lambda x: row[x])
+
+        opener = {
+            "A+": f"{name} has delivered an exceptional performance this term,",
+            "A":  f"{name} has performed excellently this term,",
+            "B+": f"{name} has shown very good academic progress this term,",
+            "B":  f"{name} has demonstrated good performance this term,",
+            "C":  f"{name} has achieved satisfactory results this term,",
+            "D":  f"{name} has shown some effort this term, though results need improvement,",
+            "F":  f"{name} has struggled significantly this term,",
+        }[score_to_grade(avg)]
+
+        body = f"achieving an overall average of {avg:.1f}%. "
+
+        if trend > 5:
+            body += f"There has been a notable improvement of {trend:.1f} points compared to the previous assessment. "
+        elif trend < -5:
+            body += f"Performance has declined by {abs(trend):.1f} points from the previous assessment. "
+
+        body += f"Strongest subject: {strong.title()} ({row[strong]:.0f}%). "
+        if row[weak] < 60:
+            body += f"{weak.title()} requires focused attention ({row[weak]:.0f}%). "
+
+        if att is not None:
+            if att >= 90:
+                body += f"Attendance has been commendable at {att:.0f}%. "
+            elif att < 75:
+                body += f"Attendance of {att:.0f}% is a concern and must be addressed urgently. "
+
+        if stress is not None and stress >= 7:
+            body += "The student appears to be experiencing elevated stress levels — pastoral support is recommended. "
+
+        if study is not None and study >= 3:
+            body += f"Consistent study habits ({study:.1f}h/day) are reflected in the results. "
+        elif study is not None and study < 2:
+            body += f"Increasing daily study time beyond the current {study:.1f}h would significantly help performance. "
+
+        closer = {
+            "Low":      f"We encourage {name} to maintain this momentum and continue setting high goals.",
+            "Moderate": f"With consistent effort and focus, {name} has the potential to achieve stronger results next term.",
+            "High":     f"We strongly encourage {name} and their family to work closely with the school to address these challenges.",
+        }.get(risk, "")
+
+        return opener + body + closer
+
+    # ─────────────────────────────────────────────
+    # REPORT CARD PDF BUILDER (single student)
+    # ─────────────────────────────────────────────
+    def make_report_card_pdf(row: pd.Series, term: str, school: str, teacher: str) -> bytes:
+        buf = BytesIO()
+        doc = SimpleDocTemplate(
+            buf, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36,
+            pagesize=(8.27 * 72, 11.69 * 72),   # A4
+        )
+        styles = getSampleStyleSheet()
+        W = 8.27 * 72 - 72   # usable width
+
+        # Custom styles
+        school_style   = ParagraphStyle("School",  fontSize=16, fontName="Helvetica-Bold",
+                                        alignment=1, textColor=rl_colors.HexColor("#1565C0"), spaceAfter=2)
+        title_style    = ParagraphStyle("Title",   fontSize=12, fontName="Helvetica",
+                                        alignment=1, textColor=rl_colors.HexColor("#424242"), spaceAfter=10)
+        section_style  = ParagraphStyle("Section", fontSize=11, fontName="Helvetica-Bold",
+                                        textColor=rl_colors.HexColor("#1565C0"), spaceAfter=4, spaceBefore=8)
+        normal         = ParagraphStyle("Normal2", fontSize=9, fontName="Helvetica", leading=13)
+        comment_style  = ParagraphStyle("Comment", fontSize=9, fontName="Helvetica",
+                                        leading=14, textColor=rl_colors.HexColor("#212121"))
+        grade_A_style  = ParagraphStyle("GradeA",  fontSize=9, fontName="Helvetica-Bold",
+                                        textColor=rl_colors.HexColor("#2e7d32"))
+        grade_F_style  = ParagraphStyle("GradeF",  fontSize=9, fontName="Helvetica-Bold",
+                                        textColor=rl_colors.HexColor("#c62828"))
+
+        sname = row[name_col]
+        avg   = row["Average"]
+        grade = score_to_grade(avg)
+        gpa   = grade_to_gpa(grade)
+        comment = generate_teacher_comment(row, subject_cols)
+
+        content = []
+
+        # ── Header banner (simulated with a table)
+        header_data = [[Paragraph(school, school_style)],
+                       [Paragraph(f"Student Academic Report Card  |  {term}", title_style)]]
+        header_tbl = Table(header_data, colWidths=[W])
+        header_tbl.setStyle(TableStyle([
+            ("BACKGROUND",  (0, 0), (-1, -1), rl_colors.HexColor("#E3F2FD")),
+            ("TOPPADDING",  (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING",(0,0), (-1, -1), 10),
+            ("LEFTPADDING", (0, 0), (-1, -1), 16),
+            ("BOX",         (0, 0), (-1, -1), 1.5, rl_colors.HexColor("#1565C0")),
+        ]))
+        content.append(header_tbl)
+        content.append(Spacer(1, 10))
+
+        # ── Student info row
+        att_val   = f"{row.get('attendance', '—')}%" if 'attendance' in row.index else "—"
+        info_data = [
+            [Paragraph("<b>Student Name:</b>", normal),  Paragraph(sname, normal),
+             Paragraph("<b>Teacher:</b>", normal),        Paragraph(teacher, normal)],
+            [Paragraph("<b>Overall Grade:</b>", normal),  Paragraph(f"<b>{grade}</b>", grade_A_style if avg >= 50 else grade_F_style),
+             Paragraph("<b>GPA:</b>", normal),            Paragraph(gpa, normal)],
+            [Paragraph("<b>Overall Average:</b>", normal),Paragraph(f"{avg:.1f}%", normal),
+             Paragraph("<b>Attendance:</b>", normal),     Paragraph(att_val, normal)],
+            [Paragraph("<b>Class Rank:</b>", normal),     Paragraph(f"#{int(row['Rank'])} of {len(df)}", normal),
+             Paragraph("<b>Status:</b>", normal),         Paragraph(row["Pass_Fail"], normal)],
+        ]
+        info_tbl = Table(info_data, colWidths=[W*0.22, W*0.28, W*0.22, W*0.28])
+        info_tbl.setStyle(TableStyle([
+            ("ROWBACKGROUNDS", (0, 0), (-1, -1), [rl_colors.HexColor("#F5F5F5"), rl_colors.white]),
+            ("GRID",          (0, 0), (-1, -1), 0.3, rl_colors.HexColor("#BDBDBD")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ]))
+        content.append(info_tbl)
+        content.append(Spacer(1, 10))
+
+        # ── Subject marks table
+        content.append(Paragraph("Subject-wise Performance", section_style))
+        sub_header = ["Subject", "Score", "Grade", "Remark", "Class Avg", "Rank in Subject"]
+        sub_rows   = []
+        for sub in subject_cols:
+            score     = row[sub]
+            cls_avg   = df[sub].mean()
+            sub_rank  = int(df[sub].rank(ascending=False, method="min")[df[name_col] == sname].values[0])
+            grade_sub = score_to_grade(score)
+            remark    = score_to_remark(score)
+            sub_rows.append([
+                sub.title(),
+                f"{score:.0f}%",
+                grade_sub,
+                remark,
+                f"{cls_avg:.1f}%",
+                f"#{sub_rank}",
+            ])
+        # Sort by score descending
+        sub_rows.sort(key=lambda x: -float(x[1].replace("%","")))
+
+        sub_data  = [sub_header] + sub_rows
+        sub_widths = [W*0.20, W*0.10, W*0.10, W*0.25, W*0.18, W*0.17]
+        sub_tbl   = Table(sub_data, colWidths=sub_widths)
+        sub_style = TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0),  rl_colors.HexColor("#1565C0")),
+            ("TEXTCOLOR",     (0, 0), (-1, 0),  rl_colors.white),
+            ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+            ("FONTSIZE",      (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [rl_colors.HexColor("#F9F9F9"), rl_colors.white]),
+            ("GRID",          (0, 0), (-1, -1), 0.3, rl_colors.HexColor("#BDBDBD")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+            ("ALIGN",         (1, 1), (-1, -1), "CENTER"),
+        ])
+        # Colour-code failing subjects
+        for i, sr in enumerate(sub_rows, start=1):
+            score_val = float(sr[1].replace("%",""))
+            if score_val < 50:
+                sub_style.add("BACKGROUND", (0, i), (-1, i), rl_colors.HexColor("#FFEBEE"))
+                sub_style.add("TEXTCOLOR",  (2, i), (2, i),  rl_colors.HexColor("#c62828"))
+            elif score_val >= 80:
+                sub_style.add("BACKGROUND", (0, i), (-1, i), rl_colors.HexColor("#E8F5E9"))
+                sub_style.add("TEXTCOLOR",  (2, i), (2, i),  rl_colors.HexColor("#2e7d32"))
+        sub_tbl.setStyle(sub_style)
+        content.append(sub_tbl)
+        content.append(Spacer(1, 10))
+
+        # ── Behaviour / co-curricular row
+        content.append(Paragraph("Conduct & Co-curricular", section_style))
+        conduct_data = [
+            ["Conduct", "Class Participation", "Study Habits", "Sports/Activities"],
+            [
+                risk_to_conduct(row["Risk"]),
+                score_to_remark(float(row.get("participation", 5)) * 10),
+                "Dedicated" if row.get("study_hours", 0) >= 3 else "Developing",
+                "Active" if row.get("sports", 0) == 1 else "Not Reported",
+            ]
+        ]
+        ct = Table(conduct_data, colWidths=[W*0.25]*4)
+        ct.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, 0),  rl_colors.HexColor("#0D47A1")),
+            ("TEXTCOLOR",     (0, 0), (-1, 0),  rl_colors.white),
+            ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+            ("FONTSIZE",      (0, 0), (-1, -1), 9),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [rl_colors.HexColor("#E8EAF6")]),
+            ("GRID",          (0, 0), (-1, -1), 0.3, rl_colors.HexColor("#9FA8DA")),
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        content.append(ct)
+        content.append(Spacer(1, 10))
+
+        # ── Performance summary bar (visual)
+        content.append(Paragraph("Performance Summary", section_style))
+        perf_cols  = [s for s in subject_cols] + (["attendance"] if "attendance" in row.index else [])
+        bar_labels = [s.title() for s in perf_cols]
+        bar_values = [min(100, max(0, float(row.get(s, 0)))) for s in perf_cols]
+
+        BAR_W = W / len(bar_values)
+        bar_rows = []
+        for lbl, val in zip(bar_labels, bar_values):
+            color = rl_colors.HexColor("#4CAF50") if val >= 70 else (
+                    rl_colors.HexColor("#FF9800") if val >= 50 else rl_colors.HexColor("#f44336"))
+            bar_rows.append(Paragraph(f"<b>{lbl}</b>  {val:.0f}%", normal))
+        perf_tbl = Table([bar_rows], colWidths=[BAR_W]*len(bar_rows))
+        perf_tbl.setStyle(TableStyle([
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("FONTSIZE",      (0, 0), (-1, -1), 8),
+            ("GRID",          (0, 0), (-1, -1), 0.2, rl_colors.HexColor("#E0E0E0")),
+        ]))
+        content.append(perf_tbl)
+        content.append(Spacer(1, 10))
+
+        # ── Teacher comment
+        content.append(Paragraph("Class Teacher's Comment", section_style))
+        comment_box_data = [[Paragraph(comment, comment_style)]]
+        comment_tbl = Table(comment_box_data, colWidths=[W])
+        comment_tbl.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), rl_colors.HexColor("#FFFDE7")),
+            ("BOX",           (0, 0), (-1, -1), 0.8, rl_colors.HexColor("#F9A825")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+        ]))
+        content.append(comment_tbl)
+        content.append(Spacer(1, 14))
+
+        # ── Signature strip
+        sig_data = [
+            [Paragraph("Class Teacher's Signature", normal),
+             Paragraph("Principal's Signature", normal),
+             Paragraph("Parent/Guardian Signature", normal)],
+            [Paragraph("_____________________", normal),
+             Paragraph("_____________________", normal),
+             Paragraph("_____________________", normal)],
+            [Paragraph(f"<b>{teacher}</b>", normal),
+             Paragraph("", normal),
+             Paragraph("", normal)],
+        ]
+        sig_tbl = Table(sig_data, colWidths=[W/3]*3)
+        sig_tbl.setStyle(TableStyle([
+            ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LINEABOVE",     (0, 0), (-1, 0),  0.5, rl_colors.HexColor("#BDBDBD")),
+        ]))
+        content.append(sig_tbl)
+
+        # ── Footer
+        content.append(Spacer(1, 8))
+        footer_data = [[Paragraph(
+            f"This report is computer-generated by the Student Performance Intelligence System  |  {term}  |  {school}",
+            ParagraphStyle("Footer", fontSize=7, textColor=rl_colors.HexColor("#9E9E9E"), alignment=1),
+        )]]
+        footer_tbl = Table(footer_data, colWidths=[W])
+        footer_tbl.setStyle(TableStyle([
+            ("LINEABOVE",     (0, 0), (-1, 0),  0.5, rl_colors.HexColor("#BDBDBD")),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ]))
+        content.append(footer_tbl)
+
+        doc.build(content)
+        return buf.getvalue()
+
+    # ─────────────────────────────────────────────
+    # UI — SETTINGS
+    # ─────────────────────────────────────────────
+    rc1, rc2, rc3 = st.columns(3)
+    with rc1:
+        rc_school  = st.text_input("🏫 School Name", value="Greenwood International School")
+    with rc2:
+        rc_term    = st.text_input("📅 Term / Period", value="Term 2 — Academic Year 2025–26")
+    with rc3:
+        rc_teacher = st.text_input("👩‍🏫 Class Teacher Name", value="Ms. Priya Sharma")
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # PREVIEW — SINGLE STUDENT
+    # ─────────────────────────────────────────────
+    st.markdown("#### 👤 Individual Report Card Preview")
+    rc_student = st.selectbox("Select student to preview:", df[name_col].tolist(), key="rc_student_select")
+    rc_row     = df[df[name_col] == rc_student].iloc[0]
+
+    # Live preview in Streamlit
+    preview_cols = st.columns([1, 1])
+    with preview_cols[0]:
+        st.markdown(f"**Student:** {rc_row[name_col]}")
+        st.markdown(f"**Overall Average:** {rc_row['Average']:.1f}%")
+        st.markdown(f"**Grade:** {score_to_grade(rc_row['Average'])}")
+        st.markdown(f"**GPA:** {grade_to_gpa(score_to_grade(rc_row['Average']))}")
+        st.markdown(f"**Class Rank:** #{int(rc_row['Rank'])} of {len(df)}")
+        st.markdown(f"**Status:** {rc_row['Pass_Fail']}")
+        if "attendance" in df.columns:
+            st.markdown(f"**Attendance:** {rc_row.get('attendance', '—')}%")
+        st.markdown(f"**Conduct:** {risk_to_conduct(rc_row['Risk'])}")
+
+    with preview_cols[1]:
+        sub_preview = {s.title(): rc_row[s] for s in subject_cols}
+        fig_rc = px.bar(
+            x=list(sub_preview.keys()),
+            y=list(sub_preview.values()),
+            color=list(sub_preview.values()),
+            color_continuous_scale=["#f44336", "#FF9800", "#4CAF50"],
+            range_color=[0, 100],
+            title="Subject Scores",
+            labels={"x": "Subject", "y": "Score", "color": "Score"},
+        )
+        fig_rc.add_hline(y=50, line_dash="dash", line_color="#f44336", annotation_text="Pass")
+        fig_rc.update_layout(coloraxis_showscale=False, height=280, margin=dict(t=40, b=20))
+        st.plotly_chart(fig_rc, use_container_width=True)
+
+    # Grade breakdown table
+    grade_rows = []
+    for sub in subject_cols:
+        score = rc_row[sub]
+        cls_avg = df[sub].mean()
+        sub_rank = int(df[sub].rank(ascending=False, method="min")[df[name_col] == rc_student].values[0])
+        grade_rows.append({
+            "Subject": sub.title(),
+            "Score": f"{score:.0f}%",
+            "Grade": score_to_grade(score),
+            "GPA": grade_to_gpa(score_to_grade(score)),
+            "Remark": score_to_remark(score),
+            "Class Avg": f"{cls_avg:.1f}%",
+            "Rank": f"#{sub_rank}",
+        })
+    grade_rows.sort(key=lambda x: -float(x["Score"].replace("%", "")))
+    st.dataframe(pd.DataFrame(grade_rows), use_container_width=True, hide_index=True)
+
+    # Teacher comment preview
+    st.markdown("**Auto-generated Teacher Comment:**")
+    tc = generate_teacher_comment(rc_row, subject_cols)
+    st.info(tc)
+
+    # Individual PDF download
+    st.markdown("---")
+    single_pdf = make_report_card_pdf(rc_row, rc_term, rc_school, rc_teacher)
+    st.download_button(
+        f"📄 Download {rc_student}'s Report Card (PDF)",
+        data=single_pdf,
+        file_name=f"report_card_{rc_student.replace(' ', '_')}.pdf",
+        mime="application/pdf",
+    )
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # CLASS OVERVIEW TABLE
+    # ─────────────────────────────────────────────
+    st.markdown("#### 🏫 Full Class Report Card Summary")
+
+    summary_rows = []
+    for _, srow in df.iterrows():
+        avg  = srow["Average"]
+        grade = score_to_grade(avg)
+        summary_rows.append({
+            "Student": srow[name_col],
+            "Average": f"{avg:.1f}%",
+            "Grade": grade,
+            "GPA": grade_to_gpa(grade),
+            "Rank": f"#{int(srow['Rank'])}",
+            "Pass/Fail": srow["Pass_Fail"],
+            "Conduct": risk_to_conduct(srow["Risk"]),
+            "Attendance": f"{srow.get('attendance', '—')}%" if "attendance" in df.columns else "—",
+        })
+    summary_rows.sort(key=lambda x: int(x["Rank"].replace("#", "")))
+    summary_df = pd.DataFrame(summary_rows)
+    st.dataframe(summary_df, use_container_width=True, hide_index=True)
+
+    # Grade distribution chart
+    grade_dist = summary_df["Grade"].value_counts().reset_index()
+    grade_dist.columns = ["Grade", "Count"]
+    grade_order = ["A+", "A", "B+", "B", "C", "D", "F"]
+    grade_dist["Grade"] = pd.Categorical(grade_dist["Grade"], categories=grade_order, ordered=True)
+    grade_dist = grade_dist.sort_values("Grade")
+
+    col_gd1, col_gd2 = st.columns(2)
+    with col_gd1:
+        fig_gd = px.bar(
+            grade_dist, x="Grade", y="Count",
+            color="Grade",
+            color_discrete_map={
+                "A+": "#1B5E20", "A": "#4CAF50", "B+": "#8BC34A",
+                "B": "#CDDC39", "C": "#FF9800", "D": "#FF5722", "F": "#f44336",
+            },
+            title="Grade Distribution Across Class",
+            text="Count",
+        )
+        fig_gd.update_traces(textposition="outside")
+        fig_gd.update_layout(showlegend=False, height=300)
+        st.plotly_chart(fig_gd, use_container_width=True)
+
+    with col_gd2:
+        fig_gpd = px.pie(
+            grade_dist, names="Grade", values="Count",
+            color="Grade",
+            color_discrete_map={
+                "A+": "#1B5E20", "A": "#4CAF50", "B+": "#8BC34A",
+                "B": "#CDDC39", "C": "#FF9800", "D": "#FF5722", "F": "#f44336",
+            },
+            title="Grade Distribution (Pie)",
+        )
+        fig_gpd.update_layout(height=300)
+        st.plotly_chart(fig_gpd, use_container_width=True)
+
+    st.markdown("---")
+
+    # ─────────────────────────────────────────────
+    # FULL CLASS PDF PACK
+    # ─────────────────────────────────────────────
+    st.markdown("#### 📦 Download Full Class Report Card Pack")
+    st.caption(
+        "Generates one PDF containing report cards for all students in the class, "
+        "ready for printing or distribution."
+    )
+
+    if st.button("🖨️ Generate Full Class PDF Pack", key="gen_class_pack_btn"):
+        with st.spinner(f"Generating report cards for all {len(df)} students…"):
+            from reportlab.lib.pagesizes import A4
+            from reportlab.platypus import PageBreak
+
+            pack_buf  = BytesIO()
+            pack_doc  = SimpleDocTemplate(
+                pack_buf, rightMargin=36, leftMargin=36,
+                topMargin=36, bottomMargin=36, pagesize=A4,
+            )
+            all_content = []
+
+            for i, (_, srow) in enumerate(df.sort_values("Rank").iterrows()):
+                # Generate each card's content and insert a page break between cards
+                card_buf = BytesIO()
+                card_doc = SimpleDocTemplate(
+                    card_buf, rightMargin=36, leftMargin=36,
+                    topMargin=36, bottomMargin=36, pagesize=A4,
+                )
+                # Re-use the helper but capture flowables instead
+                # Build single card
+                single = make_report_card_pdf(srow, rc_term, rc_school, rc_teacher)
+                # Each card is its own bytes — merge via concatenation into a multi-page doc
+                all_content.append(single)
+
+            # Merge PDFs using simple byte concatenation via reportlab multi-story trick
+            # Build a fresh merged document
+            merged_buf = BytesIO()
+            from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
+            from reportlab.lib.pagesizes import A4 as A4ps
+
+            # Simple approach: write each card PDF then concatenate with page breaks
+            # Use pypdf if available, otherwise provide individual zipped cards
+            try:
+                from pypdf import PdfWriter, PdfReader
+                writer = PdfWriter()
+                for card_bytes in all_content:
+                    reader = PdfReader(BytesIO(card_bytes))
+                    for page in reader.pages:
+                        writer.add_page(page)
+                writer.write(merged_buf)
+                merged_bytes = merged_buf.getvalue()
+                st.success(f"✅ Report card pack generated for {len(df)} students!")
+                st.download_button(
+                    "📥 Download Full Class PDF Pack",
+                    data=merged_bytes,
+                    file_name=f"class_report_cards_{rc_term.replace(' ', '_').replace('|','').replace('—','')}.pdf",
+                    mime="application/pdf",
+                    key="download_class_pack_btn",
+                )
+            except ImportError:
+                # Fallback: download cards as a zip
+                import zipfile
+                zip_buf = BytesIO()
+                with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for card_bytes, (_, srow) in zip(all_content, df.sort_values("Rank").iterrows()):
+                        fname = f"report_card_{srow[name_col].replace(' ', '_')}.pdf"
+                        zf.writestr(fname, card_bytes)
+                st.success(f"✅ {len(df)} report cards packed into a ZIP!")
+                st.download_button(
+                    "📥 Download All Report Cards (ZIP)",
+                    data=zip_buf.getvalue(),
+                    file_name="class_report_cards.zip",
+                    mime="application/zip",
+                    key="download_class_zip_btn",
+                )
