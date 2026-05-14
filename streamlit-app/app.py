@@ -102,14 +102,54 @@ gemini_api_key = st.sidebar.text_input(
 # ─────────────────────────────────────────────
 # DATA LOADING & PREPROCESSING
 # ─────────────────────────────────────────────
+# ─────────────────────────────────────────────
+# DATA LOADING & PREPROCESSING
+# ─────────────────────────────────────────────
+
+# Clean column names
 df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+# Remove duplicate column names
 df = df.loc[:, ~df.columns.duplicated()]
 
+# -----------------------------
+# MISSING VALUES ANALYSIS
+# -----------------------------
+missing_values = df.isnull().sum()
+total_missing = missing_values.sum()
+
+# Store columns having missing values
+missing_info = missing_values[missing_values > 0]
+
+# -----------------------------
+# DUPLICATE ANALYSIS
+# -----------------------------
+duplicate_count = df.duplicated().sum()
+
+# Remove duplicate rows
+df = df.drop_duplicates()
+
+# -----------------------------
+# HANDLE MISSING VALUES
+# -----------------------------
+
+# Numeric columns
 numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+
+# Fill numeric missing values with mean
+df[numeric_cols] = df[numeric_cols].fillna(
+    df[numeric_cols].mean()
+)
+
+# Fill categorical missing values with mode
+categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+
+for col in categorical_cols:
+    if df[col].isnull().sum() > 0:
+        df[col] = df[col].fillna(df[col].mode()[0])
+
+# Name column
 name_col = [col for col in df.columns if "name" in col][0]
-
-df = df.fillna(df.mean(numeric_only=True))
-
 # ─────────────────────────────────────────────
 # FEATURE ENGINEERING
 # ─────────────────────────────────────────────
@@ -735,7 +775,6 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📂 Dataset",
     "🤖 AI Chatbot",
 ])
-
 # ═══════════════════════════════════════════════════
 # TAB 1 — OVERVIEW
 # ═══════════════════════════════════════════════════
@@ -743,6 +782,7 @@ with tab1:
     st.subheader("📊 Class Dashboard")
 
     pass_pct = (df["Pass_Fail"] == "Pass").mean() * 100
+
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Avg Score", round(df["Average"].mean(), 2))
     col2.metric("Top Score", round(df["Average"].max(), 2))
@@ -752,78 +792,201 @@ with tab1:
 
     st.markdown("---")
 
+    # ═════════════════════════════════════
+    # DATASET QUALITY REPORT
+    # ═════════════════════════════════════
+    st.subheader("🧹 Dataset Quality Report")
+
+    q1, q2, q3 = st.columns(3)
+
+    q1.metric("Missing Values", int(total_missing))
+    q2.metric("Duplicate Rows Removed", int(duplicate_count))
+    q3.metric("Final Dataset Size", f"{df.shape[0]} rows")
+
+    # Missing values details
+    if total_missing > 0:
+        st.warning("⚠️ Missing values detected and handled automatically.")
+
+        missing_df = pd.DataFrame({
+            "Column": missing_info.index,
+            "Missing Values": missing_info.values
+        })
+
+        st.dataframe(missing_df, use_container_width=True)
+
+    else:
+        st.success("✅ No missing values found in dataset.")
+
+    # Duplicate rows details
+    if duplicate_count > 0:
+        st.info(f"ℹ️ {duplicate_count} duplicate rows were removed automatically.")
+    else:
+        st.success("✅ No duplicate rows found.")
+
+    st.markdown("---")
+
+    # ═════════════════════════════════════
+    # CHARTS
+    # ═════════════════════════════════════
     colA, colB = st.columns(2)
+
     with colA:
         fig_hist = px.histogram(
-            df, x="Average", nbins=10, color_discrete_sequence=["#2196F3"],
+            df,
+            x="Average",
+            nbins=10,
+            color_discrete_sequence=["#2196F3"],
             title="Score Distribution"
         )
         st.plotly_chart(fig_hist, use_container_width=True)
+
     with colB:
         fig_pf = px.pie(
-            df, names="Pass_Fail", title="Pass / Fail Distribution",
-            color_discrete_map={"Pass": "#4CAF50", "Fail": "#f44336"}
+            df,
+            names="Pass_Fail",
+            title="Pass / Fail Distribution",
+            color_discrete_map={
+                "Pass": "#4CAF50",
+                "Fail": "#f44336"
+            }
         )
         st.plotly_chart(fig_pf, use_container_width=True)
 
     colC, colD = st.columns(2)
+
     with colC:
-        fig_risk = px.pie(df, names="Risk", title="Risk Level Distribution",
-                          color_discrete_map={"Low": "#4CAF50", "Moderate": "#FF9800", "High": "#f44336"})
+        fig_risk = px.pie(
+            df,
+            names="Risk",
+            title="Risk Level Distribution",
+            color_discrete_map={
+                "Low": "#4CAF50",
+                "Moderate": "#FF9800",
+                "High": "#f44336"
+            }
+        )
         st.plotly_chart(fig_risk, use_container_width=True)
+
     with colD:
-        subj_avg_vals = {col.title(): df[col].mean() for col in subject_cols}
+        subj_avg_vals = {
+            col.title(): df[col].mean()
+            for col in subject_cols
+        }
+
         fig_subj = px.bar(
-            x=list(subj_avg_vals.keys()), y=list(subj_avg_vals.values()),
-            title="Subject-wise Class Averages", labels={"x": "Subject", "y": "Average"},
+            x=list(subj_avg_vals.keys()),
+            y=list(subj_avg_vals.values()),
+            title="Subject-wise Class Averages",
+            labels={"x": "Subject", "y": "Average"},
             color_discrete_sequence=["#9C27B0"]
         )
+
         st.plotly_chart(fig_subj, use_container_width=True)
 
     st.markdown("---")
 
-    # ── Early Warning System
+    # ═════════════════════════════════════
+    # EARLY WARNING SYSTEM
+    # ═════════════════════════════════════
     st.subheader("🚨 Early Warning System")
 
     warn_conditions = {
-        "Low Attendance (<75%)": df["attendance"] < 75 if "attendance" in df.columns else pd.Series([False] * len(df)),
-        "Low Average (<50)": df["Average"] < 50,
-        "High Stress (>7)": df["stress_level"] > 7 if "stress_level" in df.columns else pd.Series([False] * len(df)),
-        "Low Study Hours (<1.5h)": df["study_hours"] < 1.5 if "study_hours" in df.columns else pd.Series([False] * len(df)),
+        "Low Attendance (<75%)":
+            df["attendance"] < 75
+            if "attendance" in df.columns
+            else pd.Series([False] * len(df)),
+
+        "Low Average (<50)":
+            df["Average"] < 50,
+
+        "High Stress (>7)":
+            df["stress_level"] > 7
+            if "stress_level" in df.columns
+            else pd.Series([False] * len(df)),
+
+        "Low Study Hours (<1.5h)":
+            df["study_hours"] < 1.5
+            if "study_hours" in df.columns
+            else pd.Series([False] * len(df)),
     }
 
     warn_cols = st.columns(len(warn_conditions))
+
     for i, (label, mask) in enumerate(warn_conditions.items()):
         count = mask.sum()
-        warn_cols[i].metric(label, int(count), delta=None)
+        warn_cols[i].metric(label, int(count))
 
     at_risk_students = df[df["Risk"].isin(["High", "Moderate"])]
+
     if len(at_risk_students) > 0:
-        st.warning(f"⚠️ {len(at_risk_students)} students require attention")
-        risk_display_cols = [name_col, "Average", "Risk", "Pass_Fail"] + [
-            c for c in ["attendance", "study_hours", "stress_level"] if c in df.columns
+
+        st.warning(
+            f"⚠️ {len(at_risk_students)} students require attention"
+        )
+
+        risk_display_cols = [
+            name_col,
+            "Average",
+            "Risk",
+            "Pass_Fail"
+        ] + [
+            c for c in [
+                "attendance",
+                "study_hours",
+                "stress_level"
+            ]
+            if c in df.columns
         ]
-        st.dataframe(at_risk_students[risk_display_cols].sort_values("Average"), use_container_width=True)
+
+        st.dataframe(
+            at_risk_students[risk_display_cols]
+            .sort_values("Average"),
+            use_container_width=True
+        )
+
     else:
         st.success("✅ No students in the warning zone.")
 
     st.markdown("---")
 
-    # ── Leaderboard
+    # ═════════════════════════════════════
+    # LEADERBOARD
+    # ═════════════════════════════════════
     st.subheader("🏆 Top 10 Leaderboard")
-    top10 = df_ranked.head(10)[[name_col, "Rank", "Average", "Risk", "Pass_Fail"]]
+
+    top10 = df_ranked.head(10)[
+        [name_col, "Rank", "Average", "Risk", "Pass_Fail"]
+    ]
 
     top_performer = top10.iloc[0]
-    st.success(f"🥇 Top Performer: **{top_performer[name_col]}** — Average: **{top_performer['Average']:.2f}**")
+
+    st.success(
+        f"🥇 Top Performer: "
+        f"**{top_performer[name_col]}** — "
+        f"Average: **{top_performer['Average']:.2f}**"
+    )
 
     if len(top10) > 1:
         second = top10.iloc[1]
-        st.info(f"🥈 Runner-up: **{second[name_col]}** — Average: **{second['Average']:.2f}**")
 
-    st.dataframe(top10.reset_index(drop=True), use_container_width=True)
+        st.info(
+            f"🥈 Runner-up: "
+            f"**{second[name_col]}** — "
+            f"Average: **{second['Average']:.2f}**"
+        )
+
+    st.dataframe(
+        top10.reset_index(drop=True),
+        use_container_width=True
+    )
 
     st.markdown("---")
+
+    # ═════════════════════════════════════
+    # PDF DOWNLOAD
+    # ═════════════════════════════════════
     pdf_ov = make_pdf_overview(df)
+
     st.download_button(
         "📄 Download Overview Report (PDF)",
         data=pdf_ov,
@@ -831,7 +994,7 @@ with tab1:
         mime="application/pdf",
     )
 
-# ═══════════════════════════════════════════════════
+
 # TAB 2 — STUDENT ANALYSIS
 # ═══════════════════════════════════════════════════
 with tab2:
@@ -1137,13 +1300,15 @@ with tab4:
 
     st.markdown("---")
     pdf_tc = make_pdf_teacher(df)
-    st.download_button(
-        "📄 Download Teacher Dashboard Report (PDF)",
-        data=pdf_tc,
-        file_name="teacher_dashboard_report.pdf",
-        mime="application/pdf",
-    )
 
+st.download_button(
+    label="📄 Download Teacher Dashboard Report (PDF)",
+    data=pdf_tc,
+    file_name="teacher_dashboard_report.pdf",
+    mime="application/pdf",
+    key="teacher_pdf_download"
+    title="Download Teacher Dashboard"
+)
 # ═══════════════════════════════════════════════════
 # TAB 5 — DATASET
 # ═══════════════════════════════════════════════════
