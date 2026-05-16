@@ -60,12 +60,15 @@ student-performance-intelligence-system/
 git clone https://github.com/your-username/student-performance-intelligence-system.git
 
 ### 2. Navigate to the project folder
+```bash
 cd student-performance-intelligence-system
 
 ### 3. Install dependencies
+```bash
 pip install -r streamlit-app/requirements.txt
 
 ### 4. Run the Streamlit app
+```bash
 streamlit run streamlit-app/app.py
 
 ---
