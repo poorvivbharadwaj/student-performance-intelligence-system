@@ -7,7 +7,7 @@ An AI-powered academic analytics dashboard built using Streamlit and Machine Lea
 ## 🚀 Live Demo
 
 👉 Open Deployed App  
-(Replace this with your actual deployed link)
+https://student-performance-intelligence-system.streamlit.app/
 
 ---
 
@@ -53,23 +53,29 @@ student-performance-intelligence-system/
 ├── README.md
 ▶️ Run Locally
 
-Clone the repository:
+## ▶️ Run Locally
+
+### 1. Clone the repository
+```bash
 git clone https://github.com/your-username/student-performance-intelligence-system.git
 
-Install dependencies:
+2. Navigate to the project folder
+cd student-performance-intelligence-system
+
+3. Install dependencies
 pip install -r streamlit-app/requirements.txt
 
-Run the Streamlit app:
+4. Run the Streamlit app
 streamlit run streamlit-app/app.py
 
 
 ## 📊 Functional Modules
-Student Overview Dashboard
-Performance Prediction
-Attendance & Stress Analysis
-Risk Categorization
-Data Visualization
-Teacher Reporting System
+- Student Overview Dashboard
+- Performance Prediction
+- Attendance & Stress Analysis
+- Risk Categorization
+- Data Visualization
+- Teacher Reporting System
 
-##👩‍💻 Developed By
+## 👩‍💻 Developed By
 Poorvi V Bharadwaj
