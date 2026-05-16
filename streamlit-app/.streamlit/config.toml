@@ -1,9 +1,2 @@
-[server]
-port = 8000
-headless = true
-address = "0.0.0.0"
-enableCORS = false
-enableXsrfProtection = false
-
 [browser]
 gatherUsageStats = false
