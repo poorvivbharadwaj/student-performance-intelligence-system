@@ -40,7 +40,7 @@ https://student-performance-intelligence-system.streamlit.app/
 
 ## 📂 Project Structure
 
-----
+
 student-performance-intelligence-system/
 │
 ├── streamlit-app/
@@ -63,12 +63,12 @@ pip install -r streamlit-app/requirements.txt
 streamlit run streamlit-app/app.py
 ---
 ## 📊 Functional Modules
-Student Overview Dashboard
-Performance Prediction
-Attendance & Stress Analysis
-Risk Categorization
-Data Visualization
-Teacher Reporting System
----
+- Student Overview Dashboard
+- Performance Prediction
+- Attendance & Stress Analysis
+- Risk Categorization
+- Data Visualization
+- Teacher Reporting System
+
 ## 👩‍💻 Developed By
 Poorvi V Bharadwaj
