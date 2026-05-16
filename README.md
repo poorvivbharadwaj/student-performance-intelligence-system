@@ -51,7 +51,7 @@ student-performance-intelligence-system/
 │   └── config.toml
 │
 ├── README.md
-▶️ Run Locally
+---
 
 ## ▶️ Run Locally
 
@@ -59,16 +59,16 @@ student-performance-intelligence-system/
 ```bash
 git clone https://github.com/your-username/student-performance-intelligence-system.git
 
-2. Navigate to the project folder
+### 2. Navigate to the project folder
 cd student-performance-intelligence-system
 
-3. Install dependencies
+### 3. Install dependencies
 pip install -r streamlit-app/requirements.txt
 
-4. Run the Streamlit app
+### 4. Run the Streamlit app
 streamlit run streamlit-app/app.py
 
-
+---
 ## 📊 Functional Modules
 - Student Overview Dashboard
 - Performance Prediction
@@ -77,5 +77,6 @@ streamlit run streamlit-app/app.py
 - Data Visualization
 - Teacher Reporting System
 
+---
 ## 👩‍💻 Developed By
 Poorvi V Bharadwaj
