@@ -827,127 +827,143 @@ with tab1:
 
     # ═════════════════════════════════════
     # CHARTS
-    # ═════════════════════════════════════
-    colA, colB = st.columns(2)
+# ═════════════════════════════════════
+colA, colB = st.columns(2)
 
-    with colA:
-        fig_hist = px.histogram(
-            df,
-            x="Average",
-            nbins=10,
-            color_discrete_sequence=["#2196F3"],
-            title="Score Distribution"
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
+with colA:
+    fig_hist = px.histogram(
+        df,
+        x="Average",
+        nbins=10,
+        color_discrete_sequence=["#2196F3"],
+        title="Score Distribution"
+    )
+    st.plotly_chart(
+        fig_hist,
+        use_container_width=True,
+        key="hist_chart"
+    )
 
-    with colB:
-        fig_pf = px.pie(
-            df,
-            names="Pass_Fail",
-            title="Pass / Fail Distribution",
-            color_discrete_map={
-                "Pass": "#4CAF50",
-                "Fail": "#f44336"
-            }
-        )
-        st.plotly_chart(fig_pf, use_container_width=True)
-
-    colC, colD = st.columns(2)
-
-    with colC:
-        fig_risk = px.pie(
-            df,
-            names="Risk",
-            title="Risk Level Distribution",
-            color_discrete_map={
-                "Low": "#4CAF50",
-                "Moderate": "#FF9800",
-                "High": "#f44336"
-            }
-        )
-        st.plotly_chart(fig_risk, use_container_width=True)
-
-    with colD:
-        subj_avg_vals = {
-            col.title(): df[col].mean()
-            for col in subject_cols
+with colB:
+    fig_pf = px.pie(
+        df,
+        names="Pass_Fail",
+        title="Pass / Fail Distribution",
+        color_discrete_map={
+            "Pass": "#4CAF50",
+            "Fail": "#f44336"
         }
+    )
+    st.plotly_chart(
+        fig_pf,
+        use_container_width=True,
+        key="pass_fail_chart"
+    )
 
-        fig_subj = px.bar(
-            x=list(subj_avg_vals.keys()),
-            y=list(subj_avg_vals.values()),
-            title="Subject-wise Class Averages",
-            labels={"x": "Subject", "y": "Average"},
-            color_discrete_sequence=["#9C27B0"]
-        )
+colC, colD = st.columns(2)
 
-        st.plotly_chart(fig_subj, use_container_width=True)
+with colC:
+    fig_risk = px.pie(
+        df,
+        names="Risk",
+        title="Risk Level Distribution",
+        color_discrete_map={
+            "Low": "#4CAF50",
+            "Moderate": "#FF9800",
+            "High": "#f44336"
+        }
+    )
+    st.plotly_chart(
+        fig_risk,
+        use_container_width=True,
+        key="risk_chart"
+    )
 
-    st.markdown("---")
-
-    # ═════════════════════════════════════
-    # EARLY WARNING SYSTEM
-    # ═════════════════════════════════════
-    st.subheader("🚨 Early Warning System")
-
-    warn_conditions = {
-        "Low Attendance (<75%)":
-            df["attendance"] < 75
-            if "attendance" in df.columns
-            else pd.Series([False] * len(df)),
-
-        "Low Average (<50)":
-            df["Average"] < 50,
-
-        "High Stress (>7)":
-            df["stress_level"] > 7
-            if "stress_level" in df.columns
-            else pd.Series([False] * len(df)),
-
-        "Low Study Hours (<1.5h)":
-            df["study_hours"] < 1.5
-            if "study_hours" in df.columns
-            else pd.Series([False] * len(df)),
+with colD:
+    subj_avg_vals = {
+        col.title(): df[col].mean()
+        for col in subject_cols
     }
 
-    warn_cols = st.columns(len(warn_conditions))
+    fig_subj = px.bar(
+        x=list(subj_avg_vals.keys()),
+        y=list(subj_avg_vals.values()),
+        title="Subject-wise Class Averages",
+        labels={"x": "Subject", "y": "Average"},
+        color_discrete_sequence=["#9C27B0"]
+    )
 
-    for i, (label, mask) in enumerate(warn_conditions.items()):
-        count = mask.sum()
-        warn_cols[i].metric(label, int(count))
+    st.plotly_chart(
+        fig_subj,
+        use_container_width=True,
+        key="subject_avg_chart"
+    )
 
-    at_risk_students = df[df["Risk"].isin(["High", "Moderate"])]
+st.markdown("---")
 
-    if len(at_risk_students) > 0:
+# ═════════════════════════════════════
+# EARLY WARNING SYSTEM
+# ═════════════════════════════════════
+st.subheader("🚨 Early Warning System")
 
-        st.warning(
-            f"⚠️ {len(at_risk_students)} students require attention"
-        )
+warn_conditions = {
+    "Low Attendance (<75%)":
+        df["attendance"] < 75
+        if "attendance" in df.columns
+        else pd.Series([False] * len(df)),
 
-        risk_display_cols = [
-            name_col,
-            "Average",
-            "Risk",
-            "Pass_Fail"
-        ] + [
-            c for c in [
-                "attendance",
-                "study_hours",
-                "stress_level"
-            ]
-            if c in df.columns
+    "Low Average (<50)":
+        df["Average"] < 50,
+
+    "High Stress (>7)":
+        df["stress_level"] > 7
+        if "stress_level" in df.columns
+        else pd.Series([False] * len(df)),
+
+    "Low Study Hours (<1.5h)":
+        df["study_hours"] < 1.5
+        if "study_hours" in df.columns
+        else pd.Series([False] * len(df)),
+}
+
+warn_cols = st.columns(len(warn_conditions))
+
+for i, (label, mask) in enumerate(warn_conditions.items()):
+    count = mask.sum()
+    warn_cols[i].metric(label, int(count))
+
+at_risk_students = df[df["Risk"].isin(["High", "Moderate"])]
+
+if len(at_risk_students) > 0:
+
+    st.warning(
+        f"⚠️ {len(at_risk_students)} students require attention"
+    )
+
+    risk_display_cols = [
+        name_col,
+        "Average",
+        "Risk",
+        "Pass_Fail"
+    ] + [
+        c for c in [
+            "attendance",
+            "study_hours",
+            "stress_level"
         ]
+        if c in df.columns
+    ]
 
-        st.dataframe(
-            at_risk_students[risk_display_cols]
-            .sort_values("Average"),
-            use_container_width=True
-        )
+    st.dataframe(
+        at_risk_students[risk_display_cols]
+        .sort_values("Average"),
+        use_container_width=True
+    )
 
-    else:
-        st.success("✅ No students in the warning zone.")
+else:
+    st.success("✅ No students in the warning zone.")
 
-    st.markdown("---")
+st.markdown("---")
 
     # ═════════════════════════════════════
     # LEADERBOARD
