@@ -1306,8 +1306,8 @@ st.download_button(
     data=pdf_tc,
     file_name="teacher_dashboard_report.pdf",
     mime="application/pdf",
-    key="teacher_pdf_download"
-    title="Download Teacher Dashboard"
+    key="teacher_pdf_download",
+    help="Download Teacher Dashboard"
 )
 # ═══════════════════════════════════════════════════
 # TAB 5 — DATASET
