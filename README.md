@@ -40,7 +40,7 @@ https://student-performance-intelligence-system.streamlit.app/
 
 ## 📂 Project Structure
 
-
+----
 student-performance-intelligence-system/
 │
 ├── streamlit-app/
@@ -52,37 +52,23 @@ student-performance-intelligence-system/
 │
 ├── README.md
 ---
-
 ## ▶️ Run Locally
-
-### 1. Clone the repository
-```bash
+1. Clone the repository
 git clone https://github.com/your-username/student-performance-intelligence-system.git
----
-
-### 2. Navigate to the project folder
-```bash
+2. Navigate to the project folder
 cd student-performance-intelligence-system
----
-
-### 3. Install dependencies
-```bash
+3. Install dependencies
 pip install -r streamlit-app/requirements.txt
----
-
-### 4. Run the Streamlit app
-```bash
+4. Run the Streamlit app
 streamlit run streamlit-app/app.py
-
 ---
 ## 📊 Functional Modules
-- Student Overview Dashboard
-- Performance Prediction
-- Attendance & Stress Analysis
-- Risk Categorization
-- Data Visualization
-- Teacher Reporting System
-
+Student Overview Dashboard
+Performance Prediction
+Attendance & Stress Analysis
+Risk Categorization
+Data Visualization
+Teacher Reporting System
 ---
 ## 👩‍💻 Developed By
 Poorvi V Bharadwaj
