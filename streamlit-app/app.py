@@ -901,116 +901,52 @@ with colD:
 
 st.markdown("---")
 
+st.markdown("---")
+
 # ═════════════════════════════════════
-# EARLY WARNING SYSTEM
+# LEADERBOARD
 # ═════════════════════════════════════
-st.subheader("🚨 Early Warning System")
+st.subheader("🏆 Top 10 Leaderboard")
 
-warn_conditions = {
-    "Low Attendance (<75%)":
-        df["attendance"] < 75
-        if "attendance" in df.columns
-        else pd.Series([False] * len(df)),
+top10 = df_ranked.head(10)[
+    [name_col, "Rank", "Average", "Risk", "Pass_Fail"]
+]
 
-    "Low Average (<50)":
-        df["Average"] < 50,
+top_performer = top10.iloc[0]
 
-    "High Stress (>7)":
-        df["stress_level"] > 7
-        if "stress_level" in df.columns
-        else pd.Series([False] * len(df)),
+st.success(
+    f"🥇 Top Performer: "
+    f"**{top_performer[name_col]}** — "
+    f"Average: **{top_performer['Average']:.2f}**"
+)
 
-    "Low Study Hours (<1.5h)":
-        df["study_hours"] < 1.5
-        if "study_hours" in df.columns
-        else pd.Series([False] * len(df)),
-}
+if len(top10) > 1:
+    second = top10.iloc[1]
 
-warn_cols = st.columns(len(warn_conditions))
-
-for i, (label, mask) in enumerate(warn_conditions.items()):
-    count = mask.sum()
-    warn_cols[i].metric(label, int(count))
-
-at_risk_students = df[df["Risk"].isin(["High", "Moderate"])]
-
-if len(at_risk_students) > 0:
-
-    st.warning(
-        f"⚠️ {len(at_risk_students)} students require attention"
+    st.info(
+        f"🥈 Runner-up: "
+        f"**{second[name_col]}** — "
+        f"Average: **{second['Average']:.2f}**"
     )
 
-    risk_display_cols = [
-        name_col,
-        "Average",
-        "Risk",
-        "Pass_Fail"
-    ] + [
-        c for c in [
-            "attendance",
-            "study_hours",
-            "stress_level"
-        ]
-        if c in df.columns
-    ]
-
-    st.dataframe(
-        at_risk_students[risk_display_cols]
-        .sort_values("Average"),
-        use_container_width=True
-    )
-
-else:
-    st.success("✅ No students in the warning zone.")
+st.dataframe(
+    top10.reset_index(drop=True),
+    use_container_width=True
+)
 
 st.markdown("---")
 
-    # ═════════════════════════════════════
-    # LEADERBOARD
-    # ═════════════════════════════════════
-    st.subheader("🏆 Top 10 Leaderboard")
+# ═════════════════════════════════════
+# PDF DOWNLOAD
+# ═════════════════════════════════════
+pdf_ov = make_pdf_overview(df)
 
-    top10 = df_ranked.head(10)[
-        [name_col, "Rank", "Average", "Risk", "Pass_Fail"]
-    ]
-
-    top_performer = top10.iloc[0]
-
-    st.success(
-        f"🥇 Top Performer: "
-        f"**{top_performer[name_col]}** — "
-        f"Average: **{top_performer['Average']:.2f}**"
-    )
-
-    if len(top10) > 1:
-        second = top10.iloc[1]
-
-        st.info(
-            f"🥈 Runner-up: "
-            f"**{second[name_col]}** — "
-            f"Average: **{second['Average']:.2f}**"
-        )
-
-    st.dataframe(
-        top10.reset_index(drop=True),
-        use_container_width=True
-    )
-
-    st.markdown("---")
-
-    # ═════════════════════════════════════
-    # PDF DOWNLOAD
-    # ═════════════════════════════════════
-    pdf_ov = make_pdf_overview(df)
-
-    st.download_button(
-        "📄 Download Overview Report (PDF)",
-        data=pdf_ov,
-        file_name="overview_report.pdf",
-        mime="application/pdf",
-    )
-
-
+st.download_button(
+    "📄 Download Overview Report (PDF)",
+    data=pdf_ov,
+    file_name="overview_report.pdf",
+    mime="application/pdf",
+)
 # TAB 2 — STUDENT ANALYSIS
 # ═══════════════════════════════════════════════════
 with tab2:
